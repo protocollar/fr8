@@ -11,6 +11,9 @@ type keyMap struct {
 	Shell   key.Binding
 	Run     key.Binding
 	Browser key.Binding
+	Start   key.Binding
+	Stop    key.Binding
+	Attach  key.Binding
 	Quit    key.Binding
 	Yes     key.Binding
 	No      key.Binding
@@ -48,6 +51,18 @@ var keys = keyMap{
 	Browser: key.NewBinding(
 		key.WithKeys("b"),
 		key.WithHelp("b", "browser"),
+	),
+	Start: key.NewBinding(
+		key.WithKeys("S"),
+		key.WithHelp("S", "start"),
+	),
+	Stop: key.NewBinding(
+		key.WithKeys("x"),
+		key.WithHelp("x", "stop"),
+	),
+	Attach: key.NewBinding(
+		key.WithKeys("t"),
+		key.WithHelp("t", "attach"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),

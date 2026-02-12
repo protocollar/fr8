@@ -361,3 +361,185 @@ func TestArchiveResultCursorClamp(t *testing.T) {
 		t.Errorf("cursor = %d, want 1 (clamped after removing last item)", m.cursor)
 	}
 }
+
+func TestStartKeyDispatchesCmd(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('S'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after S")
+	}
+	if m.err != nil {
+		t.Errorf("unexpected error: %v", m.err)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after S")
+	}
+}
+
+func TestStartKeyErrorIfAlreadyRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('S'))
+	m = result.(model)
+
+	if m.err == nil {
+		t.Error("expected error when starting already-running workspace")
+	}
+	// Should not dispatch a command
+	if cmd != nil {
+		t.Error("expected nil cmd when workspace already running")
+	}
+}
+
+func TestStopKeyDispatchesCmd(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('x'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after x")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after x")
+	}
+}
+
+func TestStopKeyErrorIfNotRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('x'))
+	m = result.(model)
+
+	if m.err == nil {
+		t.Error("expected error when stopping non-running workspace")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when workspace not running")
+	}
+}
+
+func TestAttachKeyQuitsAndSetsRequest(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('t'))
+	m = result.(model)
+
+	if m.attachRequest == nil {
+		t.Fatal("expected attachRequest to be set")
+	}
+	if m.attachRequest.workspace.Name != "ws-two" {
+		t.Errorf("attachRequest.workspace.Name = %q, want ws-two", m.attachRequest.workspace.Name)
+	}
+	if m.attachRequest.rootPath != "/a" {
+		t.Errorf("attachRequest.rootPath = %q, want /a", m.attachRequest.rootPath)
+	}
+
+	// Should produce a quit command
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestAttachKeyErrorIfNotRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('t'))
+	m = result.(model)
+
+	if m.err == nil {
+		t.Error("expected error when attaching to non-running workspace")
+	}
+	if m.attachRequest != nil {
+		t.Error("attachRequest should be nil when workspace not running")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when workspace not running")
+	}
+}
+
+func TestStartResultMsgUpdatesRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, startResultMsg{name: "ws-two"})
+
+	if m.loading {
+		t.Error("expected loading=false after startResultMsg")
+	}
+	if !m.workspaces[1].Running {
+		t.Error("expected ws-two to be marked as running")
+	}
+	if m.workspaces[0].Running {
+		t.Error("ws-one should not be affected")
+	}
+}
+
+func TestStartResultMsgWithError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, startResultMsg{name: "ws-two", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+	if m.workspaces[1].Running {
+		t.Error("ws-two should not be marked as running after error")
+	}
+}
+
+func TestStopResultMsgUpdatesRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.loading = true
+
+	m = updateModel(m, stopResultMsg{name: "ws-two"})
+
+	if m.loading {
+		t.Error("expected loading=false after stopResultMsg")
+	}
+	if m.workspaces[1].Running {
+		t.Error("expected ws-two to be marked as not running")
+	}
+}
+
+func TestStopResultMsgWithError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.loading = true
+
+	m = updateModel(m, stopResultMsg{name: "ws-two", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+	// Running state should not change on error
+	if !m.workspaces[1].Running {
+		t.Error("ws-two running state should not change after stop error")
+	}
+}
+
+// errStub is defined in view_test.go (same package)

@@ -12,6 +12,7 @@ type DashboardResult struct {
 	ShellWorkspace   *state.Workspace
 	RunWorkspace     *state.Workspace
 	BrowserWorkspace *state.Workspace
+	AttachWorkspace  *state.Workspace
 	RootPath         string
 }
 
@@ -38,6 +39,10 @@ func RunDashboard() (*DashboardResult, error) {
 	if fm.browserRequest != nil {
 		result.BrowserWorkspace = &fm.browserRequest.workspace
 		result.RootPath = fm.browserRequest.rootPath
+	}
+	if fm.attachRequest != nil {
+		result.AttachWorkspace = &fm.attachRequest.workspace
+		result.RootPath = fm.attachRequest.rootPath
 	}
 	return result, nil
 }

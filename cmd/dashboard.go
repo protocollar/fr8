@@ -10,6 +10,7 @@ import (
 	"github.com/thomascarr/fr8/internal/config"
 	"github.com/thomascarr/fr8/internal/env"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/tmux"
 	"github.com/thomascarr/fr8/internal/tui"
 )
 
@@ -92,6 +93,13 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 
 	if result.BrowserWorkspace != nil {
 		return openWorkspaceBrowser(result.BrowserWorkspace)
+	}
+
+	if result.AttachWorkspace != nil {
+		ws := result.AttachWorkspace
+		rootPath := result.RootPath
+		sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
+		return tmux.Attach(sessionName)
 	}
 
 	return nil

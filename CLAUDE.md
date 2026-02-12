@@ -25,7 +25,9 @@ go install .            # Install to GOPATH/bin
 main.go                          # Entry point
 cmd/                             # Cobra command definitions (one file per command)
   workspace.go                   # `fr8 workspace` (alias `ws`) parent group
-  new.go, list.go, status.go … # Subcommands under `workspace`
+  new.go, list.go, status.go …  # Subcommands under `workspace`
+  start.go, stop.go, attach.go  # Background process management (tmux)
+  logs.go, ps.go                 # Background session inspection
   browser.go, dashboard.go       # Browser + interactive TUI
   repo.go                        # `fr8 repo` group (registry management)
   resolve.go                     # Shared resolveWorkspace() helper (local → global fallback)
@@ -39,15 +41,17 @@ internal/
   env/env.go                     # Build FR8_* and CONDUCTOR_* env vars
   workspace/resolve.go           # Resolve workspace by name, CWD, or global registry
   registry/registry.go           # Global repo registry (~/.config/fr8/repos.json)
+  tmux/tmux.go                   # Thin wrapper around tmux CLI for background sessions
   tui/                           # Bubble Tea dashboard TUI
 ```
 
 ## Conventions
 
 - All git operations shell out via `os/exec` — no go-git dependency
-- Workspace commands live under `fr8 workspace` (alias `fr8 ws`): new, list, status, archive, run, shell, cd, exec, browser
+- Workspace commands live under `fr8 workspace` (alias `fr8 ws`): new, list, status, archive, run, start, stop, attach, logs, ps, shell, cd, exec, browser
 - Workspace resolution: local (CWD git repo) first, falls back to global registry search when a name is given
-- `run` and `exec` commands use `syscall.Exec` to replace the process (clean signal handling)
+- `run`, `exec`, and `attach` commands use `syscall.Exec` to replace the process (clean signal handling)
+- Background process management uses tmux sessions named `fr8/<repo>/<workspace>`; graceful degradation when tmux is not installed
 - State is JSON in `.git/fr8.json` with advisory file locking (`syscall.Flock`)
 - Sets both `FR8_*` and `CONDUCTOR_*` env vars for backwards compatibility
 - Config falls back from `fr8.json` → `conductor.json` in the repo root

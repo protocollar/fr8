@@ -28,6 +28,7 @@ type workspaceItem struct {
 	Ahead     int
 	Behind    int
 	PortFree  bool // true when nothing is listening on the workspace port
+	Running   bool // true when a tmux session is active for this workspace
 	StatusErr error
 }
 
@@ -64,4 +65,19 @@ type runRequestMsg struct {
 type browserRequestMsg struct {
 	workspace state.Workspace
 	rootPath  string
+}
+
+type attachRequestMsg struct {
+	workspace state.Workspace
+	rootPath  string
+}
+
+type startResultMsg struct {
+	name string
+	err  error
+}
+
+type stopResultMsg struct {
+	name string
+	err  error
 }

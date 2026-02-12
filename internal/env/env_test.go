@@ -68,6 +68,62 @@ func TestBuildFr8OverridesConductor(t *testing.T) {
 	}
 }
 
+func TestBuildFr8OnlyContainsOnlyFr8Vars(t *testing.T) {
+	ws := &state.Workspace{
+		Name: "test-ws",
+		Path: "/tmp/ws/test-ws",
+		Port: 5000,
+	}
+
+	result := BuildFr8Only(ws, "/Users/me/project", "main")
+
+	// Should have exactly 10 vars (5 FR8 + 5 CONDUCTOR)
+	if len(result) != 10 {
+		t.Errorf("BuildFr8Only returned %d vars, want 10", len(result))
+	}
+
+	envMap := toMap(result)
+
+	expected := map[string]string{
+		"FR8_WORKSPACE_NAME":       "test-ws",
+		"FR8_WORKSPACE_PATH":       "/tmp/ws/test-ws",
+		"FR8_ROOT_PATH":            "/Users/me/project",
+		"FR8_DEFAULT_BRANCH":       "main",
+		"FR8_PORT":                 "5000",
+		"CONDUCTOR_WORKSPACE_NAME": "test-ws",
+		"CONDUCTOR_WORKSPACE_PATH": "/tmp/ws/test-ws",
+		"CONDUCTOR_ROOT_PATH":      "/Users/me/project",
+		"CONDUCTOR_DEFAULT_BRANCH": "main",
+		"CONDUCTOR_PORT":           "5000",
+	}
+
+	for k, want := range expected {
+		got, ok := envMap[k]
+		if !ok {
+			t.Errorf("missing env var %s", k)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestBuildFr8OnlyExcludesProcessEnv(t *testing.T) {
+	ws := &state.Workspace{Name: "ws", Path: "/tmp/ws", Port: 5000}
+	result := BuildFr8Only(ws, "/root", "main")
+
+	envMap := toMap(result)
+
+	// Should NOT contain PATH or HOME from the process environment
+	if _, ok := envMap["PATH"]; ok {
+		t.Error("BuildFr8Only should not include PATH from process environment")
+	}
+	if _, ok := envMap["HOME"]; ok {
+		t.Error("BuildFr8Only should not include HOME from process environment")
+	}
+}
+
 func toMap(environ []string) map[string]string {
 	m := make(map[string]string)
 	for _, e := range environ {

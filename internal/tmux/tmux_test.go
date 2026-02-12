@@ -1,0 +1,288 @@
+package tmux
+
+import (
+	"os/exec"
+	"testing"
+	"time"
+)
+
+func TestSessionName(t *testing.T) {
+	tests := []struct {
+		repo string
+		ws   string
+		want string
+	}{
+		{"myrepo", "cool-workspace", "fr8/myrepo/cool-workspace"},
+		{"fr8", "test", "fr8/fr8/test"},
+		{"repo", "ws-with-dashes", "fr8/repo/ws-with-dashes"},
+	}
+
+	for _, tt := range tests {
+		got := SessionName(tt.repo, tt.ws)
+		if got != tt.want {
+			t.Errorf("SessionName(%q, %q) = %q, want %q", tt.repo, tt.ws, got, tt.want)
+		}
+	}
+}
+
+func TestRepoName(t *testing.T) {
+	tests := []struct {
+		rootPath string
+		want     string
+	}{
+		{"/Users/me/code/myproject", "myproject"},
+		{"/a/b/c", "c"},
+		{"single", "single"},
+	}
+
+	for _, tt := range tests {
+		got := RepoName(tt.rootPath)
+		if got != tt.want {
+			t.Errorf("RepoName(%q) = %q, want %q", tt.rootPath, got, tt.want)
+		}
+	}
+}
+
+func TestShellescape(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"KEY=value", "KEY='value'"},
+		{"KEY=hello world", "KEY='hello world'"},
+		{"KEY=it's a test", "KEY='it'\"'\"'s a test'"},
+		{"KEY=", "KEY=''"},
+		{"NOEQUALS", "NOEQUALS"},
+		{"FR8_PORT=5000", "FR8_PORT='5000'"},
+		{"KEY=path/to/dir", "KEY='path/to/dir'"},
+		{"KEY=val with \"quotes\"", "KEY='val with \"quotes\"'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := shellescape(tt.input)
+			if got != tt.want {
+				t.Errorf("shellescape(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAvailable(t *testing.T) {
+	_, err := exec.LookPath("tmux")
+	if err != nil {
+		// tmux not installed — Available should return an error
+		if Available() == nil {
+			t.Error("Expected error when tmux is not installed")
+		}
+	} else {
+		// tmux installed — Available should succeed
+		if err := Available(); err != nil {
+			t.Errorf("Expected nil error when tmux is installed, got: %v", err)
+		}
+	}
+}
+
+func tmuxInstalled() bool {
+	_, err := exec.LookPath("tmux")
+	return err == nil
+}
+
+func TestIsRunningNonexistent(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	if IsRunning("fr8/nonexistent/session-that-does-not-exist-12345") {
+		t.Error("IsRunning should return false for nonexistent session")
+	}
+}
+
+func TestStopNonexistent(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	// Stop on a nonexistent session should be idempotent (no error)
+	if err := Stop("fr8/nonexistent/session-that-does-not-exist-12345"); err != nil {
+		t.Errorf("Stop on nonexistent session should return nil, got: %v", err)
+	}
+}
+
+func TestStartStopLifecycle(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	name := "fr8/test-repo/test-lifecycle-ws"
+
+	// Ensure clean state
+	Stop(name)
+
+	// Start a simple session
+	err := Start(name, "/tmp", "sleep 60", nil)
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer Stop(name)
+
+	// Should be running
+	if !IsRunning(name) {
+		t.Error("session should be running after Start")
+	}
+
+	// Starting again should fail
+	err = Start(name, "/tmp", "sleep 60", nil)
+	if err == nil {
+		t.Error("expected error when starting already-running session")
+	}
+
+	// Stop it
+	if err := Stop(name); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+
+	// Should no longer be running
+	if IsRunning(name) {
+		t.Error("session should not be running after Stop")
+	}
+}
+
+func TestStartWithEnvVars(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	name := "fr8/test-repo/test-env-ws"
+
+	// Ensure clean state
+	Stop(name)
+
+	envVars := []string{
+		"FR8_PORT=5000",
+		"FR8_WORKSPACE_NAME=test-env-ws",
+	}
+
+	err := Start(name, "/tmp", "sleep 60", envVars)
+	if err != nil {
+		t.Fatalf("Start with env vars failed: %v", err)
+	}
+	defer Stop(name)
+
+	if !IsRunning(name) {
+		t.Error("session should be running")
+	}
+}
+
+func TestCapturePanes(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	name := "fr8/test-repo/test-capture-ws"
+
+	// Ensure clean state
+	Stop(name)
+
+	// Use a long-running command so the session stays alive
+	err := Start(name, "/tmp", "sleep 60", nil)
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer Stop(name)
+
+	// Give tmux a moment to initialize the session
+	time.Sleep(200 * time.Millisecond)
+
+	// Capture should not error
+	_, err = CapturePanes(name, 50)
+	if err != nil {
+		t.Errorf("CapturePanes failed: %v", err)
+	}
+}
+
+func TestCapturePanesNotRunning(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	_, err := CapturePanes("fr8/nonexistent/no-such-session", 50)
+	if err == nil {
+		t.Error("expected error when capturing from nonexistent session")
+	}
+}
+
+func TestListFr8Sessions(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	name := "fr8/test-repo/test-list-ws"
+
+	// Ensure clean state
+	Stop(name)
+
+	// Start a session so there's something to find
+	err := Start(name, "/tmp", "sleep 60", nil)
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer Stop(name)
+
+	sessions, err := ListFr8Sessions()
+	if err != nil {
+		t.Fatalf("ListFr8Sessions failed: %v", err)
+	}
+
+	found := false
+	for _, s := range sessions {
+		if s.Name == name {
+			found = true
+			if s.Repo != "test-repo" {
+				t.Errorf("session.Repo = %q, want test-repo", s.Repo)
+			}
+			if s.Workspace != "test-list-ws" {
+				t.Errorf("session.Workspace = %q, want test-list-ws", s.Workspace)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected to find session %q in list, got %v", name, sessions)
+	}
+}
+
+func TestListFr8SessionsFiltersNonFr8(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	// Create a non-fr8 session
+	nonFr8 := "not-fr8-session-test"
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", nonFr8, "sleep 60")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("could not create test session: %v", err)
+	}
+	defer exec.Command("tmux", "kill-session", "-t", nonFr8).Run()
+
+	sessions, err := ListFr8Sessions()
+	if err != nil {
+		t.Fatalf("ListFr8Sessions failed: %v", err)
+	}
+
+	for _, s := range sessions {
+		if s.Name == nonFr8 {
+			t.Errorf("ListFr8Sessions should not include non-fr8 session %q", nonFr8)
+		}
+	}
+}
+
+func TestAttachNotRunning(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	err := Attach("fr8/nonexistent/no-such-session")
+	if err == nil {
+		t.Error("expected error when attaching to nonexistent session")
+	}
+}

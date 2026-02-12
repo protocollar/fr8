@@ -9,6 +9,7 @@ import (
 	"github.com/thomascarr/fr8/internal/env"
 	"github.com/thomascarr/fr8/internal/git"
 	"github.com/thomascarr/fr8/internal/state"
+	"github.com/thomascarr/fr8/internal/tmux"
 )
 
 var archiveForce bool
@@ -66,6 +67,17 @@ func runArchive(cmd *cobra.Command, args []string) error {
 		if response != "y" && response != "Y" {
 			fmt.Println("Cancelled.")
 			return nil
+		}
+	}
+
+	// Auto-stop tmux session if running
+	if tmux.Available() == nil {
+		sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
+		if tmux.IsRunning(sessionName) {
+			fmt.Println("Stopping background session...")
+			if err := tmux.Stop(sessionName); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to stop tmux session: %v\n", err)
+			}
 		}
 	}
 
