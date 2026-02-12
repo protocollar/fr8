@@ -504,4 +504,141 @@ func TestStopResultMsgWithError(t *testing.T) {
 	}
 }
 
+func TestRepoRunAllKeyDispatchesCmd(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(keyRune('r'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after r on repo list")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after r on repo list")
+	}
+}
+
+func TestRepoStopAllKeyDispatchesCmd(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(keyRune('x'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after x on repo list")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after x on repo list")
+	}
+}
+
+func TestRepoRunAllGlobalKeyDispatchesCmd(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(keyRune('R'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after R on repo list")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after R on repo list")
+	}
+}
+
+func TestRepoStopAllGlobalKeyDispatchesCmd(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(keyRune('X'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after X on repo list")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after X on repo list")
+	}
+}
+
+func TestRunAllResultMsg(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, runAllResultMsg{repoName: "alpha", started: 2})
+
+	if m.loading {
+		t.Error("expected loading=false after runAllResultMsg")
+	}
+	if m.err != nil {
+		t.Errorf("unexpected error: %v", m.err)
+	}
+}
+
+func TestRunAllResultMsgWithError(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, runAllResultMsg{repoName: "alpha", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+func TestStopAllResultMsg(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, stopAllResultMsg{repoName: "alpha", stopped: 2})
+
+	if m.loading {
+		t.Error("expected loading=false after stopAllResultMsg")
+	}
+	if m.err != nil {
+		t.Errorf("unexpected error: %v", m.err)
+	}
+}
+
+func TestStopAllResultMsgWithError(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, stopAllResultMsg{repoName: "alpha", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+func TestRepoRunAllIgnoredWhileLoading(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, keyRune('r'))
+	// Should remain loading, no additional cmd dispatched
+	if m.cursor != 0 {
+		t.Errorf("cursor moved while loading: got %d, want 0", m.cursor)
+	}
+}
+
+func TestRepoRunAllNoOpOnEmptyList(t *testing.T) {
+	m := model{view: viewRepoList, repos: nil}
+
+	result, cmd := m.Update(keyRune('r'))
+	m = result.(model)
+
+	if m.loading {
+		t.Error("should not set loading on empty repo list")
+	}
+	if cmd != nil {
+		t.Error("should not dispatch cmd on empty repo list")
+	}
+}
+
 // errStub is defined in view_test.go (same package)

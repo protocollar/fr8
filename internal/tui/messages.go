@@ -17,6 +17,7 @@ const (
 type repoItem struct {
 	Repo           registry.Repo
 	WorkspaceCount int
+	RunningCount   int
 	Err            error
 }
 
@@ -75,4 +76,16 @@ type stopResultMsg struct {
 type browserResultMsg struct {
 	name string
 	err  error
+}
+
+type runAllResultMsg struct {
+	repoName string
+	started  int
+	err      error
+}
+
+type stopAllResultMsg struct {
+	repoName string
+	stopped  int
+	err      error
 }
