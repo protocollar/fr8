@@ -47,6 +47,12 @@ internal/
   tui/                           # Bubble Tea dashboard TUI
 ```
 
+## Testing
+
+- All changes must be covered by existing tests or new tests
+- Run `go test ./...` before considering any change complete
+- Run `go build ./...` and `go vet ./...` to catch compile errors and static analysis issues
+
 ## Conventions
 
 - All git operations shell out via `os/exec` — no go-git dependency
