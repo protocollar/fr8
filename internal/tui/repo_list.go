@@ -30,7 +30,7 @@ func renderRepoList(m model) string {
 		content := dimStyle.Render("No repos registered. Add one with: fr8 repo add")
 		b.WriteString(renderTitledPanel("Repos", content, w))
 		b.WriteString("\n\n")
-		b.WriteString(renderHelpBar([]helpItem{{"q", "quit"}}))
+		b.WriteString(renderHelpBar([]helpItem{{"q", "quit"}}, w))
 		b.WriteString("\n")
 		return b.String()
 	}
@@ -112,7 +112,7 @@ func renderRepoList(m model) string {
 	b.WriteString(renderHelpBar([]helpItem{
 		{"enter", "open"},
 		{"q", "quit"},
-	}))
+	}, w))
 	b.WriteString("\n")
 
 	return b.String()

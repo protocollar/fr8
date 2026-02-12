@@ -29,7 +29,7 @@ func renderWorkspaceList(m model) string {
 		content := dimStyle.Render("No workspaces. Create one with: fr8 workspace new")
 		b.WriteString(renderTitledPanel("Workspaces", content, w))
 		b.WriteString("\n\n")
-		b.WriteString(renderHelpBar([]helpItem{{"esc", "back"}, {"q", "quit"}}))
+		b.WriteString(renderHelpBar([]helpItem{{"esc", "back"}, {"q", "quit"}}, w))
 		b.WriteString("\n")
 		return b.String()
 	}
@@ -123,7 +123,7 @@ func renderWorkspaceList(m model) string {
 		{"a", "archive"},
 		{"esc", "back"},
 		{"q", "quit"},
-	}))
+	}, w))
 	b.WriteString("\n")
 
 	return b.String()

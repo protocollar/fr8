@@ -292,15 +292,16 @@ func (m model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	var s string
 	switch m.view {
 	case viewRepoList:
-		return renderRepoList(m)
+		s = renderRepoList(m)
 	case viewWorkspaceList:
-		return renderWorkspaceList(m)
+		s = renderWorkspaceList(m)
 	case viewConfirmArchive:
-		return renderWorkspaceList(m)
+		s = renderWorkspaceList(m)
 	}
-	return ""
+	return padToHeight(s, m.height)
 }
 
 // Async commands
