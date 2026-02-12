@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/thomascarr/fr8/internal/config"
 	"github.com/thomascarr/fr8/internal/env"
@@ -20,25 +22,28 @@ import (
 )
 
 type model struct {
-	view          viewState
-	repos         []repoItem
-	workspaces    []workspaceItem
-	cursor        int
-	loading       bool
-	err           error
-	repoName      string // current repo being viewed
-	rootPath      string // root worktree path for current repo
-	commonDir     string // git common dir for current repo
-	shellRequest  *shellRequestMsg
-	attachRequest *attachRequestMsg
-	openRequest   *openRequestMsg
-	archiveIdx    int // workspace index pending archive confirmation
-	openers       []opener.Opener
-	openerCursor  int
-	openerWsIdx   int // workspace index for which opener picker was opened
-	width         int
-	height        int
-	spinner       spinner.Model
+	view              viewState
+	repos             []repoItem
+	workspaces        []workspaceItem
+	cursor            int
+	loading           bool
+	err               error
+	repoName          string // current repo being viewed
+	rootPath          string // root worktree path for current repo
+	commonDir         string // git common dir for current repo
+	shellRequest      *shellRequestMsg
+	attachRequest     *attachRequestMsg
+	openRequest       *openRequestMsg
+	createRequest     *createRequestMsg
+	archiveIdx        int // workspace index pending archive confirmation
+	batchArchiveNames []string
+	openers           []opener.Opener
+	openerCursor      int
+	openerWsIdx       int // workspace index for which opener picker was opened
+	createInput       textinput.Model
+	width             int
+	height            int
+	spinner           spinner.Model
 }
 
 func newModel() model {
@@ -185,6 +190,43 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		refreshRunningCounts(m.repos)
 		return m, nil
 
+	case batchArchiveResultMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			m.view = viewWorkspaceList
+			return m, nil
+		}
+		// Remove archived workspaces from list
+		archived := make(map[string]bool, len(msg.archived))
+		for _, name := range msg.archived {
+			archived[name] = true
+		}
+		var remaining []workspaceItem
+		for _, ws := range m.workspaces {
+			if !archived[ws.Workspace.Name] {
+				remaining = append(remaining, ws)
+			}
+		}
+		m.workspaces = remaining
+		if m.cursor >= len(m.workspaces) && m.cursor > 0 {
+			m.cursor = len(m.workspaces) - 1
+		}
+		// Update workspace count in repo list
+		for i := range m.repos {
+			if m.repos[i].Repo.Name == m.repoName {
+				m.repos[i].WorkspaceCount = len(m.workspaces)
+				break
+			}
+		}
+		m.batchArchiveNames = nil
+		m.err = nil
+		if len(msg.failed) > 0 {
+			m.err = fmt.Errorf("failed to archive: %s", strings.Join(msg.failed, ", "))
+		}
+		m.view = viewWorkspaceList
+		return m, nil
+
 	case openersLoadedMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -226,12 +268,16 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.view {
 	case viewConfirmArchive:
 		return m.handleConfirmKey(msg)
+	case viewConfirmBatchArchive:
+		return m.handleConfirmBatchArchiveKey(msg)
 	case viewRepoList:
 		return m.handleRepoKey(msg)
 	case viewWorkspaceList:
 		return m.handleWorkspaceKey(msg)
 	case viewOpenerPicker:
 		return m.handleOpenerPickerKey(msg)
+	case viewCreateWorkspace:
+		return m.handleCreateWorkspaceKey(msg)
 	}
 	return m, nil
 }
@@ -300,6 +346,21 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.archiveIdx = m.cursor
 			m.view = viewConfirmArchive
 		}
+	case key.Matches(msg, keys.BatchArchive):
+		if len(m.workspaces) > 0 {
+			var names []string
+			for _, ws := range m.workspaces {
+				if ws.Merged && !ws.Dirty {
+					names = append(names, ws.Workspace.Name)
+				}
+			}
+			if len(names) == 0 {
+				m.err = fmt.Errorf("no merged+clean workspaces to archive")
+				return m, nil
+			}
+			m.batchArchiveNames = names
+			m.view = viewConfirmBatchArchive
+		}
 	case key.Matches(msg, keys.Shell):
 		if len(m.workspaces) > 0 {
 			ws := m.workspaces[m.cursor]
@@ -356,6 +417,16 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			return m, tea.Batch(loadOpenersCmd(), m.spinner.Tick)
 		}
+	case key.Matches(msg, keys.New):
+		if m.rootPath != "" {
+			ti := textinput.New()
+			ti.Placeholder = "workspace name (enter for auto)"
+			ti.Focus()
+			ti.CharLimit = 64
+			m.createInput = ti
+			m.view = viewCreateWorkspace
+			return m, ti.Cursor.BlinkCmd()
+		}
 	case key.Matches(msg, keys.Enter):
 		// Enter does nothing on workspace list (no further drill-down)
 	}
@@ -388,6 +459,40 @@ func (m model) handleOpenerPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) handleConfirmBatchArchiveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Yes):
+		m.loading = true
+		m.view = viewWorkspaceList
+		return m, tea.Batch(batchArchiveCmd(m.batchArchiveNames, m.rootPath, m.commonDir), m.spinner.Tick)
+	case key.Matches(msg, keys.No):
+		m.batchArchiveNames = nil
+		m.view = viewWorkspaceList
+	}
+	return m, nil
+}
+
+func (m model) handleCreateWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.view = viewWorkspaceList
+		m.err = nil
+		return m, nil
+	case tea.KeyEnter:
+		name := strings.TrimSpace(m.createInput.Value())
+		m.createRequest = &createRequestMsg{
+			name:      name,
+			rootPath:  m.rootPath,
+			commonDir: m.commonDir,
+		}
+		return m, tea.Quit
+	}
+
+	var cmd tea.Cmd
+	m.createInput, cmd = m.createInput.Update(msg)
+	return m, cmd
+}
+
 func (m model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Yes):
@@ -410,8 +515,12 @@ func (m model) View() string {
 		s = renderWorkspaceList(m)
 	case viewConfirmArchive:
 		s = renderWorkspaceList(m)
+	case viewConfirmBatchArchive:
+		s = renderWorkspaceList(m)
 	case viewOpenerPicker:
 		s = renderOpenerPicker(m)
+	case viewCreateWorkspace:
+		s = renderCreateWorkspace(m)
 	}
 	return padToHeight(s, m.height)
 }
@@ -779,6 +888,71 @@ func refreshRunningCounts(repos []repoItem) {
 	}
 	for i := range repos {
 		repos[i].RunningCount = counts[tmux.RepoName(repos[i].Repo.Path)]
+	}
+}
+
+func batchArchiveCmd(names []string, rootPath, commonDir string) tea.Cmd {
+	return func() tea.Msg {
+		st, err := state.Load(commonDir)
+		if err != nil {
+			return batchArchiveResultMsg{err: fmt.Errorf("loading state: %w", err)}
+		}
+
+		cfg, err := config.Load(rootPath)
+		if err != nil {
+			return batchArchiveResultMsg{err: fmt.Errorf("loading config: %w", err)}
+		}
+
+		defaultBranch, _ := git.DefaultBranch(rootPath)
+		repoName := tmux.RepoName(rootPath)
+
+		var archived, failed []string
+		for _, name := range names {
+			ws := st.Find(name)
+			if ws == nil {
+				failed = append(failed, name)
+				continue
+			}
+
+			// Stop tmux session
+			if tmux.Available() == nil {
+				sessionName := tmux.SessionName(repoName, ws.Name)
+				tmux.Stop(sessionName)
+			}
+
+			// Run archive script
+			if cfg.Scripts.Archive != "" {
+				envVars := env.Build(ws, rootPath, defaultBranch)
+				cmd := exec.Command("sh", "-c", cfg.Scripts.Archive)
+				cmd.Dir = ws.Path
+				cmd.Env = envVars
+				var buf bytes.Buffer
+				cmd.Stdout = &buf
+				cmd.Stderr = &buf
+				if err := cmd.Run(); err != nil {
+					failed = append(failed, name)
+					continue
+				}
+			}
+
+			// Remove worktree
+			if err := git.WorktreeRemove(rootPath, ws.Path); err != nil {
+				failed = append(failed, name)
+				continue
+			}
+
+			archived = append(archived, name)
+		}
+
+		// Batch state update
+		for _, name := range archived {
+			st.Remove(name)
+		}
+		if err := st.Save(commonDir); err != nil {
+			return batchArchiveResultMsg{err: fmt.Errorf("saving state: %w", err)}
+		}
+
+		return batchArchiveResultMsg{archived: archived, failed: failed}
 	}
 }
 

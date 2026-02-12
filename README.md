@@ -39,25 +39,27 @@ fr8 ws archive my-feature
 
 All workspace commands live under `fr8 ws` (alias `fr8 workspace`).
 
-| Command                               | Description                                              |
-|---------------------------------------|----------------------------------------------------------|
-| `fr8 ws new [name] [-b branch] [--no-shell]` | Create a workspace and drop into a shell (skip with `--no-shell`) |
-| `fr8 ws list`                         | List all workspaces                                      |
-| `fr8 ws status [name]`                | Show workspace details and environment variables         |
-| `fr8 ws run [name] [-A/--all]`        | Run the dev server in a background tmux session          |
-| `fr8 ws stop [name] [-A/--all]`       | Stop a workspace's background tmux session               |
-| `fr8 ws attach [name]`                | Attach to a running background session                   |
-| `fr8 ws logs [name] [-n lines]`       | Show recent output from a background session             |
-| `fr8 ws ps`                           | List all running fr8 workspace sessions                  |
-| `fr8 ws exec [name] -- <cmd>`         | Run a command with workspace environment                 |
-| `fr8 ws shell [name]`                 | Open a subshell with workspace environment               |
-| `fr8 ws cd [name]`                    | Print workspace path                                     |
-| `fr8 ws browser [name]`               | Open workspace dev server in the browser                 |
-| `fr8 ws archive [name]`               | Tear down workspace (archive script + remove worktree)   |
-| `fr8 dashboard`                       | Interactive TUI for browsing repos and workspaces        |
-| `fr8 repo add\|list\|remove`          | Manage the global repo registry                          |
-| `fr8 opener add\|list\|remove`        | Manage workspace openers (e.g. VSCode, Cursor)           |
-| `fr8 completion [bash\|zsh\|fish]`    | Generate shell completions                               |
+| Command                                             | Description                                            |
+|-----------------------------------------------------|--------------------------------------------------------|
+| `fr8 ws new [name] [-b branch] [-r branch] [-p PR]` | Create a workspace and drop into a shell               |
+| `fr8 ws list`                                       | List all workspaces                                    |
+| `fr8 ws status [name]`                              | Show workspace details and environment variables       |
+| `fr8 ws env [name]`                                 | Print FR8_* env vars as `export` statements            |
+| `fr8 ws open [name] [--opener name]`                | Open workspace with a configured opener                |
+| `fr8 ws run [name] [-A/--all]`                      | Run the dev server in a background tmux session        |
+| `fr8 ws stop [name] [-A/--all]`                     | Stop a workspace's background tmux session             |
+| `fr8 ws attach [name]`                              | Attach to a running background session                 |
+| `fr8 ws logs [name] [-n lines]`                     | Show recent output from a background session           |
+| `fr8 ws ps`                                         | List all running fr8 workspace sessions                |
+| `fr8 ws exec [name] -- <cmd>`                       | Run a command with workspace environment               |
+| `fr8 ws shell [name]`                               | Open a subshell with workspace environment             |
+| `fr8 ws cd [name]`                                  | Print workspace path                                   |
+| `fr8 ws browser [name]`                             | Open workspace dev server in the browser               |
+| `fr8 ws archive [name]`                             | Tear down workspace (archive script + remove worktree) |
+| `fr8 dashboard`                                     | Interactive TUI for browsing repos and workspaces      |
+| `fr8 repo add\|list\|remove`                        | Manage the global repo registry                        |
+| `fr8 opener add\|list\|remove`                      | Manage workspace openers (e.g. VSCode, Cursor)         |
+| `fr8 completion [bash\|zsh\|fish]`                  | Generate shell completions                             |
 
 When `[name]` is omitted, fr8 auto-detects the current workspace from your working directory. When a name is provided, it also works from outside a git repo by searching all registered repos.
 
@@ -93,7 +95,7 @@ Falls back to `conductor.json` if `fr8.json` doesn't exist, so projects using [C
 
 Each workspace is a git worktree with an allocated port range and injected environment variables. The lifecycle is:
 
-1. **`fr8 ws new`** creates a git worktree, allocates a port block, syncs gitignored files (via `.worktreeinclude`), runs your setup script, then drops you into a subshell in the new workspace. Use `--no-shell` to skip the shell (useful for scripting).
+1. **`fr8 ws new`** creates a git worktree, allocates a port block, syncs gitignored files (via `.worktreeinclude`), runs your setup script, then drops you into a subshell in the new workspace. Use `--no-shell` to skip the shell (useful for scripting). Use `-r`/`--remote` to track an existing remote branch, or `-p`/`--pull-request` to create a workspace from a GitHub PR (requires `gh` CLI).
 2. **`fr8 ws run`** starts your run script in a background tmux session, freeing up your terminal.
 3. **`fr8 ws archive`** auto-stops any running background session, runs your archive script (e.g. drop databases), removes the git worktree, and frees the port.
 
@@ -120,7 +122,7 @@ fr8 ws stop my-feature
 
 Sessions are named `fr8/<repo>/<workspace>` (e.g. `fr8/myapp/bright-berlin`). The `fr8 ws list` and `fr8 ws status` commands show running state, and `fr8 ws archive` auto-stops sessions before tearing down.
 
-The TUI dashboard (`fr8 dashboard`) also supports background management: `r` to run, `x` to stop, `t` to attach, `o` to open in a configured opener.
+The TUI dashboard (`fr8 dashboard`) also supports background management: `r` to run, `x` to stop, `t` to attach, `o` to open in a configured opener, `n` to create a new workspace, and `A` to batch-archive all merged+clean workspaces.
 
 Requires tmux to be installed (`brew install tmux` / `apt install tmux`). All commands that use tmux gracefully degrade when it's not available.
 
@@ -141,7 +143,7 @@ fr8 opener list
 fr8 opener remove cursor
 ```
 
-In the dashboard, press `o` on a workspace to open it. If you have one opener configured, it's used directly. With multiple openers, a picker lets you choose.
+Open workspaces from the CLI with `fr8 ws open [name]` (auto-selects if one opener, use `--opener <name>` with multiple). In the dashboard, press `o` on a workspace to open it. If you have one opener configured, it's used directly. With multiple openers, a picker lets you choose.
 
 Opener configuration is stored at `~/.config/fr8/openers.json`.
 
@@ -158,6 +160,8 @@ fr8 sets these before running any script:
 | `FR8_PORT`           | `8000`                                     |
 
 `CONDUCTOR_*` equivalents are also set for backwards compatibility with Conductor.
+
+To load workspace environment variables into your current shell: `eval "$(fr8 ws env)"`.
 
 ### File Syncing
 

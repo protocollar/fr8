@@ -182,6 +182,16 @@ func TrackingBranch(dir, branch string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// CreateTrackingBranch creates a local branch that tracks a remote branch.
+// Runs: git branch --track <branch> <remoteBranch>
+func CreateTrackingBranch(dir, branch, remoteBranch string) error {
+	_, err := run(dir, "branch", "--track", branch, remoteBranch)
+	if err != nil {
+		return fmt.Errorf("git branch --track %s %s: %w", branch, remoteBranch, err)
+	}
+	return nil
+}
+
 func run(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir

@@ -8,8 +8,10 @@ type keyMap struct {
 	Enter          key.Binding
 	Back           key.Binding
 	Archive        key.Binding
+	BatchArchive   key.Binding
 	Shell          key.Binding
 	Open           key.Binding
+	New            key.Binding
 	Run            key.Binding
 	Browser        key.Binding
 	Stop           key.Binding
@@ -42,6 +44,10 @@ var keys = keyMap{
 		key.WithKeys("a"),
 		key.WithHelp("a", "archive"),
 	),
+	BatchArchive: key.NewBinding(
+		key.WithKeys("A"),
+		key.WithHelp("A", "archive merged"),
+	),
 	Shell: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "shell"),
@@ -49,6 +55,10 @@ var keys = keyMap{
 	Open: key.NewBinding(
 		key.WithKeys("o"),
 		key.WithHelp("o", "open"),
+	),
+	New: key.NewBinding(
+		key.WithKeys("n"),
+		key.WithHelp("n", "new"),
 	),
 	Run: key.NewBinding(
 		key.WithKeys("r"),

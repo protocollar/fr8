@@ -95,6 +95,16 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
+		if result.CreateRequested {
+			ws, err := createWorkspace(result.RootPath, result.CommonDir, result.CreateName, "", false, true, false)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating workspace: %v\n", err)
+			} else {
+				fmt.Printf("Created workspace %q\n", ws.Name)
+			}
+			continue
+		}
+
 		// No action requested (user quit) — exit the loop
 		return nil
 	}

@@ -26,6 +26,8 @@ main.go                          # Entry point
 cmd/                             # Cobra command definitions (one file per command)
   workspace.go                   # `fr8 workspace` (alias `ws`) parent group
   new.go, list.go, status.go …  # Subcommands under `workspace`
+  env.go                         # `fr8 ws env` — export workspace vars
+  ws_open.go                     # `fr8 ws open` — open workspace with opener
   start.go, stop.go, attach.go  # Background process management (tmux)
   logs.go, ps.go                 # Background session inspection
   browser.go, dashboard.go       # Browser + interactive TUI
@@ -45,6 +47,7 @@ internal/
   opener/opener.go               # Workspace opener config (~/.config/fr8/openers.json)
   tmux/tmux.go                   # Thin wrapper around tmux CLI for background sessions
   tui/                           # Bubble Tea dashboard TUI
+    create_workspace.go          # TUI view for creating workspaces
 ```
 
 ## Testing
@@ -56,10 +59,11 @@ internal/
 ## Conventions
 
 - All git operations shell out via `os/exec` — no go-git dependency
-- Workspace commands live under `fr8 workspace` (alias `fr8 ws`): new, list, status, archive, run, start, stop, attach, logs, ps, shell, cd, exec, browser
+- Workspace commands live under `fr8 workspace` (alias `fr8 ws`): new, list, status, env, open, archive, run, start, stop, attach, logs, ps, shell, cd, exec, browser
 - Workspace resolution: local (CWD git repo) first, falls back to global registry search when a name is given
 - `run`, `exec`, and `attach` commands use `syscall.Exec` to replace the process (clean signal handling)
-- `fr8 ws new` drops into a subshell after creation (`--no-shell` to skip)
+- `fr8 ws new` drops into a subshell after creation (`--no-shell` to skip); `-r`/`--remote` tracks a remote branch, `-p`/`--pull-request` resolves a GitHub PR (requires `gh`)
+- `createWorkspace()` in `cmd/new.go` is the shared creation function used by both CLI and TUI dashboard
 - Background process management uses tmux sessions named `fr8/<repo>/<workspace>`; graceful degradation when tmux is not installed
 - Workspace openers are stored at `~/.config/fr8/openers.json`; TUI picker shown when multiple are configured
 - State is JSON in `.git/fr8.json` with advisory file locking (`syscall.Flock`)

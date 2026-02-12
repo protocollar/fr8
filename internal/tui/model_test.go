@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/thomascarr/fr8/internal/opener"
 	"github.com/thomascarr/fr8/internal/registry"
@@ -898,6 +899,151 @@ func TestOpenerPickerEscGoesBack(t *testing.T) {
 	m.openers = []opener.Opener{
 		{Name: "vscode", Command: "code"},
 	}
+
+	m = updateModel(m, keyEsc())
+
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after Esc", m.view)
+	}
+}
+
+// --- Batch Archive Tests ---
+
+func TestBatchArchiveFiltersToMergedClean(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[0].Merged = true // ws-one: merged + clean
+	m.workspaces[1].Merged = true
+	m.workspaces[1].Dirty = true // ws-two: merged + dirty (excluded)
+	// ws-three: not merged (excluded)
+
+	m = updateModel(m, keyRune('A'))
+
+	if m.view != viewConfirmBatchArchive {
+		t.Errorf("view = %d, want viewConfirmBatchArchive", m.view)
+	}
+	if len(m.batchArchiveNames) != 1 {
+		t.Errorf("batchArchiveNames = %v, want [ws-one]", m.batchArchiveNames)
+	}
+	if m.batchArchiveNames[0] != "ws-one" {
+		t.Errorf("batchArchiveNames[0] = %q, want ws-one", m.batchArchiveNames[0])
+	}
+}
+
+func TestBatchArchiveNoMergedShowsError(t *testing.T) {
+	m := seedWorkspaceModel()
+	// No workspaces are merged
+
+	m = updateModel(m, keyRune('A'))
+
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList", m.view)
+	}
+	if m.err == nil {
+		t.Error("expected error when no merged workspaces")
+	}
+}
+
+func TestBatchArchiveConfirmDispatches(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewConfirmBatchArchive
+	m.batchArchiveNames = []string{"ws-one", "ws-two"}
+
+	result, cmd := m.Update(keyRune('y'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after confirming batch archive")
+	}
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after confirm", m.view)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd for batch archive operation")
+	}
+}
+
+func TestBatchArchiveCancelReturns(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewConfirmBatchArchive
+	m.batchArchiveNames = []string{"ws-one"}
+
+	m = updateModel(m, keyRune('n'))
+
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after cancel", m.view)
+	}
+	if m.batchArchiveNames != nil {
+		t.Errorf("batchArchiveNames should be nil after cancel, got %v", m.batchArchiveNames)
+	}
+}
+
+func TestBatchArchiveResultRemovesWorkspaces(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.repos = []repoItem{
+		{Repo: registry.Repo{Name: "alpha", Path: "/a"}, WorkspaceCount: 3},
+	}
+	m.repoName = "alpha"
+
+	m = updateModel(m, batchArchiveResultMsg{archived: []string{"ws-one", "ws-three"}})
+
+	if m.loading {
+		t.Error("expected loading=false after batchArchiveResultMsg")
+	}
+	if len(m.workspaces) != 1 {
+		t.Errorf("workspaces count = %d, want 1", len(m.workspaces))
+	}
+	if m.workspaces[0].Workspace.Name != "ws-two" {
+		t.Errorf("remaining workspace = %q, want ws-two", m.workspaces[0].Workspace.Name)
+	}
+	if m.repos[0].WorkspaceCount != 1 {
+		t.Errorf("repo workspace count = %d, want 1", m.repos[0].WorkspaceCount)
+	}
+}
+
+// --- Create Workspace Tests ---
+
+func TestNewKeyOpensCreateView(t *testing.T) {
+	m := seedWorkspaceModel()
+
+	m = updateModel(m, keyRune('n'))
+
+	if m.view != viewCreateWorkspace {
+		t.Errorf("view = %d, want viewCreateWorkspace", m.view)
+	}
+}
+
+func TestCreateWorkspaceEnterQuitsWithRequest(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewCreateWorkspace
+	m.createInput = textinput.New()
+	m.createInput.SetValue("my-ws")
+
+	result, cmd := m.Update(keyEnter())
+	m = result.(model)
+
+	if m.createRequest == nil {
+		t.Fatal("expected createRequest to be set")
+	}
+	if m.createRequest.name != "my-ws" {
+		t.Errorf("createRequest.name = %q, want my-ws", m.createRequest.name)
+	}
+	if m.createRequest.rootPath != "/a" {
+		t.Errorf("createRequest.rootPath = %q, want /a", m.createRequest.rootPath)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestCreateWorkspaceEscReturns(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewCreateWorkspace
+	m.createInput = textinput.New()
 
 	m = updateModel(m, keyEsc())
 

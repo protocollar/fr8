@@ -12,7 +12,9 @@ const (
 	viewRepoList viewState = iota
 	viewWorkspaceList
 	viewConfirmArchive
+	viewConfirmBatchArchive
 	viewOpenerPicker
+	viewCreateWorkspace
 )
 
 // repoItem is a repo with preloaded workspace count.
@@ -100,4 +102,16 @@ type stopAllResultMsg struct {
 type openersLoadedMsg struct {
 	openers []opener.Opener
 	err     error
+}
+
+type batchArchiveResultMsg struct {
+	archived []string
+	failed   []string
+	err      error
+}
+
+type createRequestMsg struct {
+	name     string
+	rootPath string
+	commonDir string
 }
