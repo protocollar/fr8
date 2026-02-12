@@ -25,50 +25,54 @@ var dashboardCmd = &cobra.Command{
 }
 
 func runDashboard(cmd *cobra.Command, args []string) error {
-	result, err := tui.RunDashboard()
-	if err != nil {
-		return err
-	}
-
-	if result.ShellWorkspace != nil {
-		// Open shell in the selected workspace (mirrors cmd/shell.go)
-		ws := result.ShellWorkspace
-		rootPath := result.RootPath
-		defaultBranch, _ := git.DefaultBranch(rootPath)
-		envVars := env.Build(ws, rootPath, defaultBranch)
-
-		userShell := os.Getenv("SHELL")
-		if userShell == "" {
-			userShell = "/bin/bash"
-		}
-
-		fmt.Printf("Entering workspace %q (%s)\n", ws.Name, ws.Path)
-		fmt.Printf("Type 'exit' to leave the workspace shell.\n\n")
-
-		c := exec.Command(userShell)
-		c.Dir = ws.Path
-		c.Env = envVars
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-		c.Stdin = os.Stdin
-
-		if err := c.Run(); err != nil {
-			if _, ok := err.(*exec.ExitError); ok {
-				return nil
-			}
+	for {
+		result, err := tui.RunDashboard()
+		if err != nil {
 			return err
 		}
 
-		fmt.Printf("\nLeft workspace %q.\n", ws.Name)
+		if result.ShellWorkspace != nil {
+			ws := result.ShellWorkspace
+			rootPath := result.RootPath
+			defaultBranch, _ := git.DefaultBranch(rootPath)
+			envVars := env.Build(ws, rootPath, defaultBranch)
+
+			userShell := os.Getenv("SHELL")
+			if userShell == "" {
+				userShell = "/bin/bash"
+			}
+
+			fmt.Printf("Entering workspace %q (%s)\n", ws.Name, ws.Path)
+			fmt.Printf("Type 'exit' to return to the dashboard.\n\n")
+
+			c := exec.Command(userShell)
+			c.Dir = ws.Path
+			c.Env = envVars
+			c.Stdout = os.Stdout
+			c.Stderr = os.Stderr
+			c.Stdin = os.Stdin
+
+			if err := c.Run(); err != nil {
+				if _, ok := err.(*exec.ExitError); !ok {
+					return err
+				}
+			}
+
+			fmt.Printf("\nLeft workspace %q.\n", ws.Name)
+			continue
+		}
+
+		if result.AttachWorkspace != nil {
+			ws := result.AttachWorkspace
+			rootPath := result.RootPath
+			sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
+			if err := tmux.AttachRun(sessionName); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// No action requested (user quit) — exit the loop
 		return nil
 	}
-
-	if result.AttachWorkspace != nil {
-		ws := result.AttachWorkspace
-		rootPath := result.RootPath
-		sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
-		return tmux.Attach(sessionName)
-	}
-
-	return nil
 }

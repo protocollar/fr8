@@ -104,6 +104,21 @@ func Attach(name string) error {
 	return execFunc(tmuxPath, []string{"tmux", "attach-session", "-t", name}, os.Environ())
 }
 
+// AttachRun attaches to a tmux session as a child process, waiting for it to
+// complete (detach or session exit). Use instead of Attach when the caller
+// needs to retain control afterward, e.g. to return to the TUI dashboard.
+func AttachRun(name string) error {
+	if !IsRunning(name) {
+		return fmt.Errorf("session %q is not running", name)
+	}
+
+	cmd := exec.Command("tmux", "attach-session", "-t", name)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // CapturePanes captures recent output from a tmux session's pane.
 // lines controls how many lines of scrollback to capture.
 func CapturePanes(name string, lines int) (string, error) {
