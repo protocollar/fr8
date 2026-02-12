@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -335,6 +336,51 @@ func TestStartStopMultiple(t *testing.T) {
 	}
 	if IsRunning(name2) {
 		t.Errorf("session %q should not be running after Stop", name2)
+	}
+}
+
+func TestAttachPassesEnvironment(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	name := "fr8/test-repo/test-attach-env-ws"
+	Stop(name)
+
+	if err := Start(name, "/tmp", "sleep 60", nil); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer Stop(name)
+
+	var capturedEnv []string
+	origExec := execFunc
+	execFunc = func(argv0 string, argv []string, envv []string) error {
+		capturedEnv = envv
+		return nil
+	}
+	defer func() { execFunc = origExec }()
+
+	if err := Attach(name); err != nil {
+		t.Fatalf("Attach failed: %v", err)
+	}
+
+	if len(capturedEnv) == 0 {
+		t.Fatal("Attach passed empty environment to exec; expected os.Environ()")
+	}
+
+	// TERM must be present for tmux to work
+	found := false
+	for _, e := range capturedEnv {
+		if len(e) >= 5 && e[:5] == "TERM=" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		// TERM might not be set in CI, so just check we got the real env
+		if len(capturedEnv) != len(os.Environ()) {
+			t.Errorf("expected environ length %d, got %d", len(os.Environ()), len(capturedEnv))
+		}
 	}
 }
 
