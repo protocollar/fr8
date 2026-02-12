@@ -1,0 +1,14 @@
+# Files to copy to new worktrees (must also be in .gitignore)
+# Uses .gitignore-style patterns
+# https://code.claude.com/docs/en/desktop#copying-files-ignored-with-gitignore
+
+# Environment files
+.env*
+
+# Claude Code local configs (personal settings, local agents/commands)
+.claude/settings.local.json
+.claude/**/local-*
+.claude/**/local/
+
+# MCP server configuration
+.mcp.json

@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git status:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git worktree:*)",
+      "Bash(git mv:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run view:*)",
+      "Bash(ls:*)",
+      "Bash(echo:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ps:*)",
+      "Bash(lsof:*)",
+      "Bash(wc:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(xargs:*)",
+      "mcp__context7__*",
+      "mcp__claude-in-chrome__*",
+      "mcp__playwright__*"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [],
+    "defaultMode": "default"
+  },
+  "hooks": {},
+  "env": {},
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  }
+}

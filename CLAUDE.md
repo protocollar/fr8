@@ -1,0 +1,53 @@
+# fr8
+
+Go CLI for managing git worktrees as isolated dev workspaces. See `README.md` for user-facing docs.
+
+## Stack
+
+- Go 1.25+
+- Cobra (CLI framework)
+- doublestar (glob matching for `.worktreeinclude`)
+- No other external dependencies — standard library for everything else
+
+## Build & Test
+
+```bash
+go build ./...          # Build all packages
+go build -o fr8 .       # Build binary
+go vet ./...            # Static analysis
+go test ./...           # Run tests
+go install .            # Install to GOPATH/bin
+```
+
+## Project Layout
+
+```
+main.go                          # Entry point
+cmd/                             # Cobra command definitions (one file per command)
+  workspace.go                   # `fr8 workspace` (alias `ws`) parent group
+  new.go, list.go, status.go … # Subcommands under `workspace`
+  browser.go, dashboard.go       # Browser + interactive TUI
+  repo.go                        # `fr8 repo` group (registry management)
+  resolve.go                     # Shared resolveWorkspace() helper (local → global fallback)
+internal/
+  config/config.go               # Load fr8.json / conductor.json
+  state/state.go                 # Workspace state CRUD (.git/fr8.json)
+  git/git.go                     # Shell out to git (worktree, branch, status)
+  port/port.go                   # Sequential port block allocation
+  names/{names,words}.go         # Adjective-city name generation
+  filesync/filesync.go           # .worktreeinclude glob + copy
+  env/env.go                     # Build FR8_* and CONDUCTOR_* env vars
+  workspace/resolve.go           # Resolve workspace by name, CWD, or global registry
+  registry/registry.go           # Global repo registry (~/.config/fr8/repos.json)
+  tui/                           # Bubble Tea dashboard TUI
+```
+
+## Conventions
+
+- All git operations shell out via `os/exec` — no go-git dependency
+- Workspace commands live under `fr8 workspace` (alias `fr8 ws`): new, list, status, archive, run, shell, cd, exec, browser
+- Workspace resolution: local (CWD git repo) first, falls back to global registry search when a name is given
+- `run` and `exec` commands use `syscall.Exec` to replace the process (clean signal handling)
+- State is JSON in `.git/fr8.json` with advisory file locking (`syscall.Flock`)
+- Sets both `FR8_*` and `CONDUCTOR_*` env vars for backwards compatibility
+- Config falls back from `fr8.json` → `conductor.json` in the repo root
