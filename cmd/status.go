@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/tmux"
 )
 
 func init() {
@@ -56,6 +57,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  FR8_ROOT_PATH       %s\n", rootPath)
 	fmt.Printf("  FR8_DEFAULT_BRANCH  %s\n", defaultBranch)
 	fmt.Printf("  FR8_PORT            %d\n", ws.Port)
+
+	// Process status
+	fmt.Println()
+	if tmux.Available() == nil {
+		sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
+		if tmux.IsRunning(sessionName) {
+			fmt.Printf("Process: running (fr8 ws attach %s)\n", ws.Name)
+		} else {
+			fmt.Printf("Process: not running (fr8 ws run %s)\n", ws.Name)
+		}
+	}
 
 	return nil
 }

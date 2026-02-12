@@ -219,57 +219,53 @@ func TestShellRequest(t *testing.T) {
 	}
 }
 
-func TestRunRequest(t *testing.T) {
+func TestRunKeyDispatchesCmd(t *testing.T) {
 	m := seedWorkspaceModel()
 	m.cursor = 1
 
 	result, cmd := m.Update(keyRune('r'))
 	m = result.(model)
 
-	if m.runRequest == nil {
-		t.Fatal("expected runRequest to be set")
+	if !m.loading {
+		t.Error("expected loading=true after r")
 	}
-	if m.runRequest.workspace.Name != "ws-two" {
-		t.Errorf("runRequest.workspace.Name = %q, want ws-two", m.runRequest.workspace.Name)
+	if m.err != nil {
+		t.Errorf("unexpected error: %v", m.err)
 	}
-	if m.runRequest.rootPath != "/a" {
-		t.Errorf("runRequest.rootPath = %q, want /a", m.runRequest.rootPath)
-	}
-
-	// Should produce a quit command
 	if cmd == nil {
-		t.Fatal("expected quit cmd")
-	}
-	quitMsg := cmd()
-	if _, ok := quitMsg.(tea.QuitMsg); !ok {
-		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+		t.Error("expected non-nil cmd after r")
 	}
 }
 
-func TestBrowserRequest(t *testing.T) {
+func TestRunKeyErrorIfAlreadyRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('r'))
+	m = result.(model)
+
+	if m.err == nil {
+		t.Error("expected error when running already-running workspace")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when workspace already running")
+	}
+}
+
+func TestBrowserKeyDispatchesCmd(t *testing.T) {
 	m := seedWorkspaceModel()
 	m.cursor = 1
 
 	result, cmd := m.Update(keyRune('b'))
 	m = result.(model)
 
-	if m.browserRequest == nil {
-		t.Fatal("expected browserRequest to be set")
-	}
-	if m.browserRequest.workspace.Name != "ws-two" {
-		t.Errorf("browserRequest.workspace.Name = %q, want ws-two", m.browserRequest.workspace.Name)
-	}
-	if m.browserRequest.rootPath != "/a" {
-		t.Errorf("browserRequest.rootPath = %q, want /a", m.browserRequest.rootPath)
-	}
-
-	// Should produce a quit command
+	// Browser is async — should dispatch a command but NOT quit
 	if cmd == nil {
-		t.Fatal("expected quit cmd")
+		t.Error("expected non-nil cmd after b")
 	}
-	quitMsg := cmd()
-	if _, ok := quitMsg.(tea.QuitMsg); !ok {
-		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	if m.loading {
+		t.Error("browser should not set loading=true")
 	}
 }
 
@@ -361,3 +357,288 @@ func TestArchiveResultCursorClamp(t *testing.T) {
 		t.Errorf("cursor = %d, want 1 (clamped after removing last item)", m.cursor)
 	}
 }
+
+
+func TestStopKeyDispatchesCmd(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('x'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after x")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after x")
+	}
+}
+
+func TestStopKeyErrorIfNotRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('x'))
+	m = result.(model)
+
+	if m.err == nil {
+		t.Error("expected error when stopping non-running workspace")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when workspace not running")
+	}
+}
+
+func TestAttachKeyQuitsAndSetsRequest(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('t'))
+	m = result.(model)
+
+	if m.attachRequest == nil {
+		t.Fatal("expected attachRequest to be set")
+	}
+	if m.attachRequest.workspace.Name != "ws-two" {
+		t.Errorf("attachRequest.workspace.Name = %q, want ws-two", m.attachRequest.workspace.Name)
+	}
+	if m.attachRequest.rootPath != "/a" {
+		t.Errorf("attachRequest.rootPath = %q, want /a", m.attachRequest.rootPath)
+	}
+
+	// Should produce a quit command
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestAttachKeyErrorIfNotRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('t'))
+	m = result.(model)
+
+	if m.err == nil {
+		t.Error("expected error when attaching to non-running workspace")
+	}
+	if m.attachRequest != nil {
+		t.Error("attachRequest should be nil when workspace not running")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when workspace not running")
+	}
+}
+
+func TestStartResultMsgUpdatesRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, startResultMsg{name: "ws-two"})
+
+	if m.loading {
+		t.Error("expected loading=false after startResultMsg")
+	}
+	if !m.workspaces[1].Running {
+		t.Error("expected ws-two to be marked as running")
+	}
+	if m.workspaces[0].Running {
+		t.Error("ws-one should not be affected")
+	}
+}
+
+func TestStartResultMsgWithError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, startResultMsg{name: "ws-two", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+	if m.workspaces[1].Running {
+		t.Error("ws-two should not be marked as running after error")
+	}
+}
+
+func TestStopResultMsgUpdatesRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.loading = true
+
+	m = updateModel(m, stopResultMsg{name: "ws-two"})
+
+	if m.loading {
+		t.Error("expected loading=false after stopResultMsg")
+	}
+	if m.workspaces[1].Running {
+		t.Error("expected ws-two to be marked as not running")
+	}
+}
+
+func TestStopResultMsgWithError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.loading = true
+
+	m = updateModel(m, stopResultMsg{name: "ws-two", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+	// Running state should not change on error
+	if !m.workspaces[1].Running {
+		t.Error("ws-two running state should not change after stop error")
+	}
+}
+
+func TestRepoRunAllKeyDispatchesCmd(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(keyRune('r'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after r on repo list")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after r on repo list")
+	}
+}
+
+func TestRepoStopAllKeyDispatchesCmd(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(keyRune('x'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after x on repo list")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after x on repo list")
+	}
+}
+
+func TestRepoRunAllGlobalKeyDispatchesCmd(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(keyRune('R'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after R on repo list")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after R on repo list")
+	}
+}
+
+func TestRepoStopAllGlobalKeyDispatchesCmd(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(keyRune('X'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after X on repo list")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after X on repo list")
+	}
+}
+
+func TestRunAllResultMsg(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, runAllResultMsg{repoName: "alpha", started: 2})
+
+	if m.loading {
+		t.Error("expected loading=false after runAllResultMsg")
+	}
+	if m.err != nil {
+		t.Errorf("unexpected error: %v", m.err)
+	}
+}
+
+func TestRunAllResultMsgWithError(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, runAllResultMsg{repoName: "alpha", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+func TestStopAllResultMsg(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, stopAllResultMsg{repoName: "alpha", stopped: 2})
+
+	if m.loading {
+		t.Error("expected loading=false after stopAllResultMsg")
+	}
+	if m.err != nil {
+		t.Errorf("unexpected error: %v", m.err)
+	}
+}
+
+func TestStopAllResultMsgWithError(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, stopAllResultMsg{repoName: "alpha", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+func TestRepoRunAllIgnoredWhileLoading(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	m = updateModel(m, keyRune('r'))
+	// Should remain loading, no additional cmd dispatched
+	if m.cursor != 0 {
+		t.Errorf("cursor moved while loading: got %d, want 0", m.cursor)
+	}
+}
+
+func TestRepoRunAllNoOpOnEmptyList(t *testing.T) {
+	m := model{view: viewRepoList, repos: nil}
+
+	result, cmd := m.Update(keyRune('r'))
+	m = result.(model)
+
+	if m.loading {
+		t.Error("should not set loading on empty repo list")
+	}
+	if cmd != nil {
+		t.Error("should not dispatch cmd on empty repo list")
+	}
+}
+
+// errStub is defined in view_test.go (same package)

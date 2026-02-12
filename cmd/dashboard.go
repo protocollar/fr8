@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"syscall"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/config"
 	"github.com/thomascarr/fr8/internal/env"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/tmux"
 	"github.com/thomascarr/fr8/internal/tui"
 )
 
@@ -64,34 +63,11 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if result.RunWorkspace != nil {
-		ws := result.RunWorkspace
+	if result.AttachWorkspace != nil {
+		ws := result.AttachWorkspace
 		rootPath := result.RootPath
-
-		cfg, err := config.Load(rootPath)
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
-		if cfg.Scripts.Run == "" {
-			return fmt.Errorf("no run script configured in fr8.json")
-		}
-
-		defaultBranch, _ := git.DefaultBranch(rootPath)
-		envVars := env.Build(ws, rootPath, defaultBranch)
-
-		if err := os.Chdir(ws.Path); err != nil {
-			return fmt.Errorf("changing to workspace directory: %w", err)
-		}
-
-		shell, err := shellPath()
-		if err != nil {
-			return err
-		}
-		return syscall.Exec(shell, []string{"sh", "-c", cfg.Scripts.Run}, envVars)
-	}
-
-	if result.BrowserWorkspace != nil {
-		return openWorkspaceBrowser(result.BrowserWorkspace)
+		sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
+		return tmux.Attach(sessionName)
 	}
 
 	return nil

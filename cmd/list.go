@@ -5,10 +5,13 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"path/filepath"
+
 	"github.com/spf13/cobra"
 	"github.com/thomascarr/fr8/internal/git"
 	"github.com/thomascarr/fr8/internal/registry"
 	"github.com/thomascarr/fr8/internal/state"
+	"github.com/thomascarr/fr8/internal/tmux"
 )
 
 var listAll bool
@@ -51,14 +54,26 @@ func runList(cmd *cobra.Command, args []string) error {
 	reconcile(st, cwd)
 
 	if len(st.Workspaces) == 0 {
-		fmt.Println("No workspaces. Create one with: fr8 new")
+		fmt.Println("No workspaces. Create one with: fr8 ws new")
 		return nil
 	}
 
+	// Determine repo name for tmux session lookup
+	hasTmux := tmux.Available() == nil
+	rootPath, _ := git.RootWorktreePath(cwd)
+	repoName := filepath.Base(rootPath)
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tBRANCH\tPORT\tPATH")
+	fmt.Fprintln(w, "NAME\tBRANCH\tPORT\tRUNNING\tPATH")
 	for _, ws := range st.Workspaces {
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", ws.Name, ws.Branch, ws.Port, ws.Path)
+		running := ""
+		if hasTmux {
+			sessionName := tmux.SessionName(repoName, ws.Name)
+			if tmux.IsRunning(sessionName) {
+				running = "●"
+			}
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", ws.Name, ws.Branch, ws.Port, running, ws.Path)
 	}
 	w.Flush()
 
@@ -84,8 +99,10 @@ func runListAll() error {
 		return nil
 	}
 
+	hasTmux := tmux.Available() == nil
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "REPO\tNAME\tBRANCH\tPORT\tPATH")
+	fmt.Fprintln(w, "REPO\tNAME\tBRANCH\tPORT\tRUNNING\tPATH")
 
 	for _, repo := range reg.Repos {
 		commonDir, err := git.CommonDir(repo.Path)
@@ -101,7 +118,14 @@ func runListAll() error {
 		}
 
 		for _, ws := range st.Workspaces {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", repo.Name, ws.Name, ws.Branch, ws.Port, ws.Path)
+			running := ""
+			if hasTmux {
+				sessionName := tmux.SessionName(repo.Name, ws.Name)
+				if tmux.IsRunning(sessionName) {
+					running = "●"
+				}
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", repo.Name, ws.Name, ws.Branch, ws.Port, running, ws.Path)
 		}
 	}
 

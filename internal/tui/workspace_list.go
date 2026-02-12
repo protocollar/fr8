@@ -29,7 +29,7 @@ func renderWorkspaceList(m model) string {
 		content := dimStyle.Render("No workspaces. Create one with: fr8 workspace new")
 		b.WriteString(renderTitledPanel("Workspaces", content, w))
 		b.WriteString("\n\n")
-		b.WriteString(renderHelpBar([]helpItem{{"esc", "back"}, {"q", "quit"}}))
+		b.WriteString(renderHelpBar([]helpItem{{"esc", "back"}, {"q", "quit"}}, w))
 		b.WriteString("\n")
 		return b.String()
 	}
@@ -48,17 +48,24 @@ func renderWorkspaceList(m model) string {
 		port := portStyle.Render(fmt.Sprintf(":%d", item.Workspace.Port))
 		name := item.Workspace.Name
 
+		runBadge := "  "
+		if item.Running {
+			runBadge = statusCleanStyle.Render("▶ ")
+		}
+
 		nameWidth := 24
 		var line string
 		if i == m.cursor {
-			line = fmt.Sprintf("%s %s  %s  %s",
+			line = fmt.Sprintf("%s %s%s  %s  %s",
 				cursorStyle.Render("▸"),
+				runBadge,
 				selectedRowStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)),
 				port,
 				status,
 			)
 		} else {
-			line = fmt.Sprintf("  %s  %s  %s",
+			line = fmt.Sprintf("  %s%s  %s  %s",
+				runBadge,
 				normalRowStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)),
 				port,
 				status,
@@ -91,13 +98,15 @@ func renderWorkspaceList(m model) string {
 		var detail strings.Builder
 		detail.WriteString(renderDetailRow("Branch", item.Workspace.Branch))
 		detail.WriteString("\n")
-		portVal := fmt.Sprintf(":%d", item.Workspace.Port)
-		if item.PortFree {
-			portVal += "  " + statusErrorStyle.Render("● not running")
-		}
-		detail.WriteString(renderDetailRow("Port", portVal))
+		detail.WriteString(renderDetailRow("Port", fmt.Sprintf(":%d", item.Workspace.Port)))
 		detail.WriteString("\n")
 		detail.WriteString(renderDetailRow("Path", shortenPath(item.Workspace.Path)))
+		detail.WriteString("\n")
+		if item.Running {
+			detail.WriteString(renderDetailRow("Process", statusCleanStyle.Render("● running")))
+		} else {
+			detail.WriteString(renderDetailRow("Process", dimStyle.Render("not running")))
+		}
 		detail.WriteString("\n")
 		detail.WriteString(renderDetailRow("Status", formatStatus(item)))
 		b.WriteString(renderTitledPanel("Details", detail.String(), w))
@@ -107,12 +116,14 @@ func renderWorkspaceList(m model) string {
 	// Help bar
 	b.WriteString(renderHelpBar([]helpItem{
 		{"r", "run"},
+		{"x", "stop"},
+		{"t", "attach"},
 		{"s", "shell"},
 		{"b", "browser"},
 		{"a", "archive"},
 		{"esc", "back"},
 		{"q", "quit"},
-	}))
+	}, w))
 	b.WriteString("\n")
 
 	return b.String()

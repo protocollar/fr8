@@ -45,3 +45,21 @@ func Build(ws *state.Workspace, rootPath, defaultBranch string) []string {
 	}
 	return result
 }
+
+// BuildFr8Only returns only the FR8_* and CONDUCTOR_* environment variables
+// (not merged with the current process env). Used for tmux sessions where
+// the user's shell environment is inherited automatically.
+func BuildFr8Only(ws *state.Workspace, rootPath, defaultBranch string) []string {
+	return []string{
+		"FR8_WORKSPACE_NAME=" + ws.Name,
+		"FR8_WORKSPACE_PATH=" + ws.Path,
+		"FR8_ROOT_PATH=" + rootPath,
+		"FR8_DEFAULT_BRANCH=" + defaultBranch,
+		fmt.Sprintf("FR8_PORT=%d", ws.Port),
+		"CONDUCTOR_WORKSPACE_NAME=" + ws.Name,
+		"CONDUCTOR_WORKSPACE_PATH=" + ws.Path,
+		"CONDUCTOR_ROOT_PATH=" + rootPath,
+		"CONDUCTOR_DEFAULT_BRANCH=" + defaultBranch,
+		fmt.Sprintf("CONDUCTOR_PORT=%d", ws.Port),
+	}
+}

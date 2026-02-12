@@ -17,6 +17,7 @@ const (
 type repoItem struct {
 	Repo           registry.Repo
 	WorkspaceCount int
+	RunningCount   int
 	Err            error
 }
 
@@ -28,6 +29,7 @@ type workspaceItem struct {
 	Ahead     int
 	Behind    int
 	PortFree  bool // true when nothing is listening on the workspace port
+	Running   bool // true when a tmux session is active for this workspace
 	StatusErr error
 }
 
@@ -56,12 +58,34 @@ type shellRequestMsg struct {
 	rootPath  string
 }
 
-type runRequestMsg struct {
+type attachRequestMsg struct {
 	workspace state.Workspace
 	rootPath  string
 }
 
-type browserRequestMsg struct {
-	workspace state.Workspace
-	rootPath  string
+type startResultMsg struct {
+	name string
+	err  error
+}
+
+type stopResultMsg struct {
+	name string
+	err  error
+}
+
+type browserResultMsg struct {
+	name string
+	err  error
+}
+
+type runAllResultMsg struct {
+	repoName string
+	started  int
+	err      error
+}
+
+type stopAllResultMsg struct {
+	repoName string
+	stopped  int
+	err      error
 }

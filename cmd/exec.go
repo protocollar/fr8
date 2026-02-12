@@ -22,9 +22,9 @@ var execCmd = &cobra.Command{
 The workspace name is optional if you're inside a workspace directory.
 
 Examples:
-  fr8 exec myws -- bundle exec rails c
-  fr8 exec -- npm test
-  cd /path/to/workspace && fr8 exec -- make build`,
+  fr8 ws exec myws -- bundle exec rails c
+  fr8 ws exec -- npm test
+  cd /path/to/workspace && fr8 ws exec -- make build`,
 	Args:               cobra.MinimumNArgs(1),
 	DisableFlagParsing: true,
 	RunE:               runExec,
@@ -44,7 +44,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	if dashIdx == -1 {
-		return fmt.Errorf("usage: fr8 exec [name] -- <command>")
+		return fmt.Errorf("usage: fr8 ws exec [name] -- <command>")
 	}
 	if dashIdx > 0 {
 		wsName = args[0]

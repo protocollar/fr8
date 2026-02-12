@@ -30,7 +30,7 @@ func renderRepoList(m model) string {
 		content := dimStyle.Render("No repos registered. Add one with: fr8 repo add")
 		b.WriteString(renderTitledPanel("Repos", content, w))
 		b.WriteString("\n\n")
-		b.WriteString(renderHelpBar([]helpItem{{"q", "quit"}}))
+		b.WriteString(renderHelpBar([]helpItem{{"q", "quit"}}, w))
 		b.WriteString("\n")
 		return b.String()
 	}
@@ -61,25 +61,33 @@ func renderRepoList(m model) string {
 			innerAvail = 20
 		}
 
-		// Layout: name (dynamic), ws count (right-aligned), path (remaining)
+		// Layout: name (dynamic), running badge, ws count, path
 		nameWidth := 20
 		if nameWidth > innerAvail/2 {
 			nameWidth = innerAvail / 2
 		}
+
+		var runBadge string
+		if item.RunningCount > 0 {
+			runBadge = statusCleanStyle.Render(fmt.Sprintf("▶ %d/%d", item.RunningCount, item.WorkspaceCount)) + "   "
+		}
+
 		countStr := fmt.Sprintf("%s workspaces", wsCount)
 		pathStr := dimStyle.Render(path)
 
 		var line string
 		if i == m.cursor {
-			line = fmt.Sprintf("%s %s   %s   %s",
+			line = fmt.Sprintf("%s %s   %s%s   %s",
 				cursorStyle.Render("▸"),
 				selectedRowStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)),
+				runBadge,
 				dimStyle.Render(countStr),
 				pathStr,
 			)
 		} else {
-			line = fmt.Sprintf("  %s   %s   %s",
+			line = fmt.Sprintf("  %s   %s%s   %s",
 				normalRowStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)),
+				runBadge,
 				dimStyle.Render(countStr),
 				pathStr,
 			)
@@ -103,6 +111,12 @@ func renderRepoList(m model) string {
 			wsLabel = errorStyle.Render("error loading")
 		}
 		detail.WriteString(renderDetailRow("Workspaces", wsLabel))
+		detail.WriteString("\n")
+		if item.RunningCount > 0 {
+			detail.WriteString(renderDetailRow("Running", statusCleanStyle.Render(fmt.Sprintf("▶ %d of %d", item.RunningCount, item.WorkspaceCount))))
+		} else {
+			detail.WriteString(renderDetailRow("Running", dimStyle.Render("none")))
+		}
 
 		b.WriteString(renderTitledPanel("Details", detail.String(), w))
 		b.WriteString("\n")
@@ -111,8 +125,12 @@ func renderRepoList(m model) string {
 	// Help bar
 	b.WriteString(renderHelpBar([]helpItem{
 		{"enter", "open"},
+		{"r", "run all"},
+		{"x", "stop all"},
+		{"R", "global run"},
+		{"X", "global stop"},
 		{"q", "quit"},
-	}))
+	}, w))
 	b.WriteString("\n")
 
 	return b.String()

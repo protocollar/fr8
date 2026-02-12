@@ -23,34 +23,40 @@ cat > fr8.json <<'EOF'
 EOF
 
 # Create a workspace
-fr8 new my-feature -b feature/auth
+fr8 ws new my-feature -b feature/auth
 
-# Start the dev server
-fr8 run my-feature
+# Start the dev server in the background
+fr8 ws run my-feature
 
 # Run a command in the workspace
-fr8 exec my-feature -- npm test
+fr8 ws exec my-feature -- npm test
 
 # Tear it down when done
-fr8 archive my-feature
+fr8 ws archive my-feature
 ```
 
 ## Commands
 
-| Command                            | Description                                              |
-|------------------------------------|----------------------------------------------------------|
-| `fr8 new [name] [-b branch]`       | Create a workspace (worktree + port + file sync + setup) |
-| `fr8 list`                         | List all workspaces                                      |
-| `fr8 status [name]`                | Show workspace details and environment variables         |
-| `fr8 run [name]`                   | Start the dev server (execs into the run script)         |
-| `fr8 exec [name] -- <cmd>`         | Run a command with workspace environment                 |
-| `fr8 shell [name]`                 | Open a subshell with workspace environment               |
-| `fr8 cd [name]`                    | Print workspace path                                     |
-| `fr8 browser [name]`               | Open workspace dev server in the browser                 |
-| `fr8 archive [name]`               | Tear down workspace (archive script + remove worktree)   |
-| `fr8 dashboard`                    | Interactive TUI for browsing repos and workspaces        |
-| `fr8 repo add\|list\|remove`       | Manage the global repo registry                          |
-| `fr8 completion [bash\|zsh\|fish]` | Generate shell completions                               |
+All workspace commands live under `fr8 ws` (alias `fr8 workspace`).
+
+| Command                               | Description                                              |
+|---------------------------------------|----------------------------------------------------------|
+| `fr8 ws new [name] [-b branch]`       | Create a workspace (worktree + port + file sync + setup) |
+| `fr8 ws list`                         | List all workspaces                                      |
+| `fr8 ws status [name]`                | Show workspace details and environment variables         |
+| `fr8 ws run [name] [-A/--all]`        | Run the dev server in a background tmux session          |
+| `fr8 ws stop [name] [-A/--all]`       | Stop a workspace's background tmux session               |
+| `fr8 ws attach [name]`                | Attach to a running background session                   |
+| `fr8 ws logs [name] [-n lines]`       | Show recent output from a background session             |
+| `fr8 ws ps`                           | List all running fr8 workspace sessions                  |
+| `fr8 ws exec [name] -- <cmd>`         | Run a command with workspace environment                 |
+| `fr8 ws shell [name]`                 | Open a subshell with workspace environment               |
+| `fr8 ws cd [name]`                    | Print workspace path                                     |
+| `fr8 ws browser [name]`               | Open workspace dev server in the browser                 |
+| `fr8 ws archive [name]`               | Tear down workspace (archive script + remove worktree)   |
+| `fr8 dashboard`                       | Interactive TUI for browsing repos and workspaces        |
+| `fr8 repo add\|list\|remove`          | Manage the global repo registry                          |
+| `fr8 completion [bash\|zsh\|fish]`    | Generate shell completions                               |
 
 When `[name]` is omitted, fr8 auto-detects the current workspace from your working directory. When a name is provided, it also works from outside a git repo by searching all registered repos.
 
@@ -66,7 +72,7 @@ Create `fr8.json` in your repo root:
     "archive": "bin/archive-workspace"
   },
   "portRange": 10,
-  "basePort": 5000,
+  "basePort": 6000,
   "worktreePath": "../fr8"
 }
 ```
@@ -77,7 +83,7 @@ Create `fr8.json` in your repo root:
 | `scripts.run`     |                | Command to start the dev server                   |
 | `scripts.archive` |                | Command to run before removing a workspace        |
 | `portRange`       | `10`           | Number of consecutive ports per workspace         |
-| `basePort`        | `5000`         | Starting port for allocation                      |
+| `basePort`        | `6000`         | Starting port for allocation                      |
 | `worktreePath`    | `../fr8`       | Where to create worktrees (relative to repo root) |
 
 Falls back to `conductor.json` if `fr8.json` doesn't exist, so projects using [Conductor](https://conductor.build) work without changes.
@@ -86,9 +92,36 @@ Falls back to `conductor.json` if `fr8.json` doesn't exist, so projects using [C
 
 Each workspace is a git worktree with an allocated port range and injected environment variables. The lifecycle is:
 
-1. **`fr8 new`** creates a git worktree, allocates a port block, syncs gitignored files (via `.worktreeinclude`), then runs your setup script.
-2. **`fr8 run`** execs into your run script with workspace env vars set. The fr8 process is replaced so signals (Ctrl+C) go directly to your dev server.
-3. **`fr8 archive`** runs your archive script (e.g. drop databases), removes the git worktree, and frees the port.
+1. **`fr8 ws new`** creates a git worktree, allocates a port block, syncs gitignored files (via `.worktreeinclude`), then runs your setup script.
+2. **`fr8 ws run`** starts your run script in a background tmux session, freeing up your terminal.
+3. **`fr8 ws archive`** auto-stops any running background session, runs your archive script (e.g. drop databases), removes the git worktree, and frees the port.
+
+### Background Process Management
+
+fr8 uses tmux to run workspaces in the background. This lets you start multiple workspaces without dedicating a terminal to each one.
+
+```bash
+# Start a workspace in the background
+fr8 ws run my-feature
+
+# See what's running
+fr8 ws ps
+
+# Check recent output
+fr8 ws logs my-feature
+
+# Attach for interactive debugging (detach with Ctrl-B d)
+fr8 ws attach my-feature
+
+# Stop when done
+fr8 ws stop my-feature
+```
+
+Sessions are named `fr8/<repo>/<workspace>` (e.g. `fr8/myapp/bright-berlin`). The `fr8 ws list` and `fr8 ws status` commands show running state, and `fr8 ws archive` auto-stops sessions before tearing down.
+
+The TUI dashboard (`fr8 dashboard`) also supports background management: `r` to run, `x` to stop, `t` to attach.
+
+Requires tmux to be installed (`brew install tmux` / `apt install tmux`). All commands that use tmux gracefully degrade when it's not available.
 
 ### Environment Variables
 
@@ -100,7 +133,7 @@ fr8 sets these before running any script:
 | `FR8_WORKSPACE_PATH` | `/Users/you/fr8/myapp/bright-berlin`       |
 | `FR8_ROOT_PATH`      | `/Users/you/Code/myapp`                    |
 | `FR8_DEFAULT_BRANCH` | `main`                                     |
-| `FR8_PORT`           | `5000`                                     |
+| `FR8_PORT`           | `6000`                                     |
 
 `CONDUCTOR_*` equivalents are also set for backwards compatibility with Conductor.
 
@@ -138,7 +171,7 @@ Add a helper function to jump into workspaces:
 
 ```bash
 # ~/.zshrc or ~/.bashrc
-fr8cd() { cd "$(fr8 cd "$@")"; }
+fr8cd() { cd "$(fr8 ws cd "$@")"; }
 ```
 
 Enable completions:

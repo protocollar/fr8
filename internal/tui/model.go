@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"runtime"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -14,6 +15,7 @@ import (
 	"github.com/thomascarr/fr8/internal/port"
 	"github.com/thomascarr/fr8/internal/registry"
 	"github.com/thomascarr/fr8/internal/state"
+	"github.com/thomascarr/fr8/internal/tmux"
 )
 
 type model struct {
@@ -26,9 +28,8 @@ type model struct {
 	repoName     string // current repo being viewed
 	rootPath     string // root worktree path for current repo
 	commonDir    string // git common dir for current repo
-	shellRequest   *shellRequestMsg
-	runRequest     *runRequestMsg
-	browserRequest *browserRequestMsg
+	shellRequest  *shellRequestMsg
+	attachRequest *attachRequestMsg
 	archiveIdx   int // workspace index pending archive confirmation
 	width        int
 	height       int
@@ -121,6 +122,62 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.view = viewWorkspaceList
 		return m, nil
+
+	case startResultMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		for i, ws := range m.workspaces {
+			if ws.Workspace.Name == msg.name {
+				m.workspaces[i].Running = true
+				break
+			}
+		}
+		m.err = nil
+		return m, nil
+
+	case stopResultMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		for i, ws := range m.workspaces {
+			if ws.Workspace.Name == msg.name {
+				m.workspaces[i].Running = false
+				break
+			}
+		}
+		m.err = nil
+		return m, nil
+
+	case browserResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		}
+		return m, nil
+
+	case runAllResultMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.err = nil
+		}
+		refreshRunningCounts(m.repos)
+		return m, nil
+
+	case stopAllResultMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.err = nil
+		}
+		refreshRunningCounts(m.repos)
+		return m, nil
 	}
 	return m, nil
 }
@@ -163,6 +220,30 @@ func (m model) handleRepoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			repo := m.repos[m.cursor].Repo
 			return m, tea.Batch(loadWorkspacesCmd(repo), m.spinner.Tick)
 		}
+	case key.Matches(msg, keys.Run):
+		if len(m.repos) > 0 {
+			m.loading = true
+			m.err = nil
+			return m, tea.Batch(runAllCmd(m.repos[m.cursor]), m.spinner.Tick)
+		}
+	case key.Matches(msg, keys.Stop):
+		if len(m.repos) > 0 {
+			m.loading = true
+			m.err = nil
+			return m, tea.Batch(stopAllCmd(m.repos[m.cursor]), m.spinner.Tick)
+		}
+	case key.Matches(msg, keys.RunAllGlobal):
+		if len(m.repos) > 0 {
+			m.loading = true
+			m.err = nil
+			return m, tea.Batch(runAllGlobalCmd(m.repos), m.spinner.Tick)
+		}
+	case key.Matches(msg, keys.StopAllGlobal):
+		if len(m.repos) > 0 {
+			m.loading = true
+			m.err = nil
+			return m, tea.Batch(stopAllGlobalCmd(), m.spinner.Tick)
+		}
 	}
 	return m, nil
 }
@@ -198,16 +279,38 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Run):
 		if len(m.workspaces) > 0 {
 			ws := m.workspaces[m.cursor]
-			m.runRequest = &runRequestMsg{
-				workspace: ws.Workspace,
-				rootPath:  m.rootPath,
+			if ws.Running {
+				m.err = fmt.Errorf("%q is already running", ws.Workspace.Name)
+				return m, nil
 			}
-			return m, tea.Quit
+			m.loading = true
+			m.err = nil
+			return m, tea.Batch(startWorkspaceCmd(ws.Workspace, m.rootPath, m.commonDir), m.spinner.Tick)
 		}
 	case key.Matches(msg, keys.Browser):
 		if len(m.workspaces) > 0 {
 			ws := m.workspaces[m.cursor]
-			m.browserRequest = &browserRequestMsg{
+			return m, openBrowserCmd(ws.Workspace)
+		}
+	case key.Matches(msg, keys.Stop):
+		if len(m.workspaces) > 0 {
+			ws := m.workspaces[m.cursor]
+			if !ws.Running {
+				m.err = fmt.Errorf("%q is not running", ws.Workspace.Name)
+				return m, nil
+			}
+			m.loading = true
+			m.err = nil
+			return m, tea.Batch(stopWorkspaceCmd(ws.Workspace, m.rootPath), m.spinner.Tick)
+		}
+	case key.Matches(msg, keys.Attach):
+		if len(m.workspaces) > 0 {
+			ws := m.workspaces[m.cursor]
+			if !ws.Running {
+				m.err = fmt.Errorf("%q is not running (run with r)", ws.Workspace.Name)
+				return m, nil
+			}
+			m.attachRequest = &attachRequestMsg{
 				workspace: ws.Workspace,
 				rootPath:  m.rootPath,
 			}
@@ -233,15 +336,16 @@ func (m model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	var s string
 	switch m.view {
 	case viewRepoList:
-		return renderRepoList(m)
+		s = renderRepoList(m)
 	case viewWorkspaceList:
-		return renderWorkspaceList(m)
+		s = renderWorkspaceList(m)
 	case viewConfirmArchive:
-		return renderWorkspaceList(m)
+		s = renderWorkspaceList(m)
 	}
-	return ""
+	return padToHeight(s, m.height)
 }
 
 // Async commands
@@ -277,6 +381,18 @@ func loadReposCmd() tea.Msg {
 		items[i].WorkspaceCount = len(st.Workspaces)
 	}
 
+	// Enrich with running counts from tmux sessions.
+	if tmux.Available() == nil {
+		sessions, _ := tmux.ListFr8Sessions()
+		runCounts := make(map[string]int)
+		for _, s := range sessions {
+			runCounts[s.Repo]++
+		}
+		for i := range items {
+			items[i].RunningCount = runCounts[tmux.RepoName(items[i].Repo.Path)]
+		}
+	}
+
 	return reposLoadedMsg{repos: items}
 }
 
@@ -299,10 +415,18 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 
 		defaultBranch, _ := git.DefaultBranch(rootPath)
 
+		hasTmux := tmux.Available() == nil
+		repoName := tmux.RepoName(rootPath)
+
 		items := make([]workspaceItem, len(st.Workspaces))
 		for i, ws := range st.Workspaces {
 			items[i] = workspaceItem{Workspace: ws}
 			items[i].PortFree = port.IsFree(ws.Port)
+
+			if hasTmux {
+				sessionName := tmux.SessionName(repoName, ws.Name)
+				items[i].Running = tmux.IsRunning(sessionName)
+			}
 
 			dirty, err := git.HasUncommittedChanges(ws.Path)
 			if err != nil {
@@ -337,8 +461,254 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 	}
 }
 
+func startWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd {
+	return func() tea.Msg {
+		if err := tmux.Available(); err != nil {
+			return startResultMsg{name: ws.Name, err: err}
+		}
+
+		cfg, err := config.Load(rootPath)
+		if err != nil {
+			return startResultMsg{name: ws.Name, err: fmt.Errorf("loading config: %w", err)}
+		}
+
+		if cfg.Scripts.Run == "" {
+			return startResultMsg{name: ws.Name, err: fmt.Errorf("no run script configured")}
+		}
+
+		defaultBranch, _ := git.DefaultBranch(rootPath)
+		envVars := env.BuildFr8Only(&ws, rootPath, defaultBranch)
+
+		repoName := tmux.RepoName(rootPath)
+		sessionName := tmux.SessionName(repoName, ws.Name)
+		if err := tmux.Start(sessionName, ws.Path, cfg.Scripts.Run, envVars); err != nil {
+			return startResultMsg{name: ws.Name, err: err}
+		}
+
+		return startResultMsg{name: ws.Name}
+	}
+}
+
+func stopWorkspaceCmd(ws state.Workspace, rootPath string) tea.Cmd {
+	return func() tea.Msg {
+		if err := tmux.Available(); err != nil {
+			return stopResultMsg{name: ws.Name, err: err}
+		}
+
+		repoName := tmux.RepoName(rootPath)
+		sessionName := tmux.SessionName(repoName, ws.Name)
+		if err := tmux.Stop(sessionName); err != nil {
+			return stopResultMsg{name: ws.Name, err: err}
+		}
+
+		return stopResultMsg{name: ws.Name}
+	}
+}
+
+func openBrowserCmd(ws state.Workspace) tea.Cmd {
+	return func() tea.Msg {
+		url := fmt.Sprintf("http://localhost:%d", ws.Port)
+		err := openURL(url)
+		return browserResultMsg{name: ws.Name, err: err}
+	}
+}
+
+func openURL(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	default:
+		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
+	}
+	return cmd.Start()
+}
+
+func runAllCmd(item repoItem) tea.Cmd {
+	return func() tea.Msg {
+		repo := item.Repo
+		if err := tmux.Available(); err != nil {
+			return runAllResultMsg{repoName: repo.Name, err: err}
+		}
+
+		commonDir, err := git.CommonDir(repo.Path)
+		if err != nil {
+			return runAllResultMsg{repoName: repo.Name, err: err}
+		}
+
+		rootPath, err := git.RootWorktreePath(repo.Path)
+		if err != nil {
+			return runAllResultMsg{repoName: repo.Name, err: err}
+		}
+
+		st, err := state.Load(commonDir)
+		if err != nil {
+			return runAllResultMsg{repoName: repo.Name, err: err}
+		}
+
+		cfg, err := config.Load(rootPath)
+		if err != nil {
+			return runAllResultMsg{repoName: repo.Name, err: err}
+		}
+		if cfg.Scripts.Run == "" {
+			return runAllResultMsg{repoName: repo.Name, err: fmt.Errorf("no run script configured for %s", repo.Name)}
+		}
+
+		defaultBranch, _ := git.DefaultBranch(rootPath)
+		repoName := tmux.RepoName(rootPath)
+
+		var started int
+		for _, ws := range st.Workspaces {
+			sessionName := tmux.SessionName(repoName, ws.Name)
+			if tmux.IsRunning(sessionName) {
+				continue
+			}
+			envVars := env.BuildFr8Only(&ws, rootPath, defaultBranch)
+			if err := tmux.Start(sessionName, ws.Path, cfg.Scripts.Run, envVars); err != nil {
+				return runAllResultMsg{repoName: repo.Name, started: started, err: err}
+			}
+			started++
+		}
+
+		return runAllResultMsg{repoName: repo.Name, started: started}
+	}
+}
+
+func stopAllCmd(item repoItem) tea.Cmd {
+	return func() tea.Msg {
+		repo := item.Repo
+		if err := tmux.Available(); err != nil {
+			return stopAllResultMsg{repoName: repo.Name, err: err}
+		}
+
+		sessions, err := tmux.ListFr8Sessions()
+		if err != nil {
+			return stopAllResultMsg{repoName: repo.Name, err: err}
+		}
+
+		repoName := tmux.RepoName(repo.Path)
+		var stopped int
+		for _, s := range sessions {
+			if s.Repo != repoName {
+				continue
+			}
+			if err := tmux.Stop(s.Name); err != nil {
+				return stopAllResultMsg{repoName: repo.Name, stopped: stopped, err: err}
+			}
+			stopped++
+		}
+
+		return stopAllResultMsg{repoName: repo.Name, stopped: stopped}
+	}
+}
+
+func runAllGlobalCmd(items []repoItem) tea.Cmd {
+	return func() tea.Msg {
+		if err := tmux.Available(); err != nil {
+			return runAllResultMsg{err: err}
+		}
+
+		var totalStarted int
+		for _, item := range items {
+			if item.Err != nil {
+				continue
+			}
+			repo := item.Repo
+
+			commonDir, err := git.CommonDir(repo.Path)
+			if err != nil {
+				continue
+			}
+
+			rootPath, err := git.RootWorktreePath(repo.Path)
+			if err != nil {
+				continue
+			}
+
+			st, err := state.Load(commonDir)
+			if err != nil {
+				continue
+			}
+
+			cfg, err := config.Load(rootPath)
+			if err != nil || cfg.Scripts.Run == "" {
+				continue
+			}
+
+			defaultBranch, _ := git.DefaultBranch(rootPath)
+			repoName := tmux.RepoName(rootPath)
+
+			for _, ws := range st.Workspaces {
+				sessionName := tmux.SessionName(repoName, ws.Name)
+				if tmux.IsRunning(sessionName) {
+					continue
+				}
+				envVars := env.BuildFr8Only(&ws, rootPath, defaultBranch)
+				if err := tmux.Start(sessionName, ws.Path, cfg.Scripts.Run, envVars); err != nil {
+					continue
+				}
+				totalStarted++
+			}
+		}
+
+		return runAllResultMsg{started: totalStarted}
+	}
+}
+
+func stopAllGlobalCmd() tea.Cmd {
+	return func() tea.Msg {
+		if err := tmux.Available(); err != nil {
+			return stopAllResultMsg{err: err}
+		}
+
+		sessions, err := tmux.ListFr8Sessions()
+		if err != nil {
+			return stopAllResultMsg{err: err}
+		}
+
+		var stopped int
+		for _, s := range sessions {
+			if err := tmux.Stop(s.Name); err != nil {
+				continue
+			}
+			stopped++
+		}
+
+		return stopAllResultMsg{stopped: stopped}
+	}
+}
+
+// refreshRunningCounts re-derives RunningCount on all repos from tmux sessions.
+func refreshRunningCounts(repos []repoItem) {
+	if tmux.Available() != nil {
+		for i := range repos {
+			repos[i].RunningCount = 0
+		}
+		return
+	}
+	sessions, _ := tmux.ListFr8Sessions()
+	counts := make(map[string]int)
+	for _, s := range sessions {
+		counts[s.Repo]++
+	}
+	for i := range repos {
+		repos[i].RunningCount = counts[tmux.RepoName(repos[i].Repo.Path)]
+	}
+}
+
 func archiveWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd {
 	return func() tea.Msg {
+		// Auto-stop tmux session before archiving
+		if tmux.Available() == nil {
+			repoName := tmux.RepoName(rootPath)
+			sessionName := tmux.SessionName(repoName, ws.Name)
+			tmux.Stop(sessionName) // best-effort, ignore errors
+		}
+
 		cfg, err := config.Load(rootPath)
 		if err != nil {
 			return archiveResultMsg{name: ws.Name, err: fmt.Errorf("loading config: %w", err)}

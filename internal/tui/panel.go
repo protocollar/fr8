@@ -31,7 +31,7 @@ func renderTitledPanel(title, content string, width int) string {
 	top.WriteString(borderFg.Render(" "))
 
 	// Calculate remaining dashes. lipgloss.Width accounts for ANSI.
-	used := 4 + lipgloss.Width(titleRendered) + 1 // "╭─ " + title + " "
+	used := 3 + lipgloss.Width(titleRendered) + 1 // "╭─ " (3) + title + " " (1)
 	remaining := width - used - 1                  // -1 for "╮"
 	if remaining < 0 {
 		remaining = 0
@@ -42,8 +42,11 @@ func renderTitledPanel(title, content string, width int) string {
 	lines := strings.Split(content, "\n")
 	var body strings.Builder
 	for _, line := range lines {
-		// Pad or truncate line to fill inner width.
 		lineWidth := lipgloss.Width(line)
+		if lineWidth > innerWidth {
+			line = lipgloss.NewStyle().MaxWidth(innerWidth).Render(line)
+			lineWidth = lipgloss.Width(line)
+		}
 		pad := innerWidth - lineWidth
 		if pad < 0 {
 			pad = 0
@@ -68,16 +71,61 @@ type helpItem struct {
 	desc string
 }
 
-// renderHelpBar renders a styled help bar: "key desc  key desc  ..."
-func renderHelpBar(items []helpItem) string {
-	var parts []string
-	for _, item := range items {
-		parts = append(parts,
-			helpKeyStyle.Render(item.key)+" "+helpDescStyle.Render(item.desc),
-		)
-	}
+// renderHelpBar renders a styled help bar that wraps onto multiple lines when
+// items would exceed width.
+func renderHelpBar(items []helpItem, width int) string {
 	sep := helpSepStyle.Render("·")
-	return "  " + strings.Join(parts, " "+sep+" ")
+	sepWidth := lipgloss.Width(sep) + 2 // " · "
+	indent := "  "
+	indentWidth := 2
+
+	var lines []string
+	var cur strings.Builder
+	cur.WriteString(indent)
+	curWidth := indentWidth
+
+	for i, item := range items {
+		rendered := helpKeyStyle.Render(item.key) + " " + helpDescStyle.Render(item.desc)
+		itemWidth := lipgloss.Width(rendered)
+
+		extra := 0
+		if i > 0 && curWidth > indentWidth {
+			extra = sepWidth
+		}
+
+		if curWidth+extra+itemWidth > width && curWidth > indentWidth {
+			lines = append(lines, cur.String())
+			cur.Reset()
+			cur.WriteString(indent)
+			curWidth = indentWidth
+			extra = 0
+		}
+
+		if curWidth > indentWidth {
+			cur.WriteString(" " + sep + " ")
+			curWidth += sepWidth
+		}
+		cur.WriteString(rendered)
+		curWidth += itemWidth
+	}
+	if curWidth > indentWidth {
+		lines = append(lines, cur.String())
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// padToHeight appends empty lines so the output fills exactly targetHeight lines.
+func padToHeight(s string, targetHeight int) string {
+	lines := strings.Count(s, "\n")
+	// Account for content after the last newline.
+	if len(s) > 0 && s[len(s)-1] != '\n' {
+		lines++
+	}
+	if lines >= targetHeight {
+		return s
+	}
+	return s + strings.Repeat("\n", targetHeight-lines)
 }
 
 // renderBreadcrumb renders "seg > seg > active" with the last segment bold.

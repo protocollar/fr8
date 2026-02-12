@@ -14,10 +14,10 @@ var cdCmd = &cobra.Command{
 	Use:   "cd [name]",
 	Short: "Print workspace path (for use with cd)",
 	Long: `Prints the workspace path to stdout for use with shell cd:
-  cd $(fr8 cd myws)
+  cd $(fr8 ws cd myws)
 
 Or add a shell function to ~/.zshrc:
-  fr8cd() { cd "$(fr8 cd "$@")"; }`,
+  fr8cd() { cd "$(fr8 ws cd "$@")"; }`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: workspaceNameCompletion,
 	RunE:              runCd,
