@@ -57,16 +57,6 @@ type shellRequestMsg struct {
 	rootPath  string
 }
 
-type runRequestMsg struct {
-	workspace state.Workspace
-	rootPath  string
-}
-
-type browserRequestMsg struct {
-	workspace state.Workspace
-	rootPath  string
-}
-
 type attachRequestMsg struct {
 	workspace state.Workspace
 	rootPath  string
@@ -78,6 +68,11 @@ type startResultMsg struct {
 }
 
 type stopResultMsg struct {
+	name string
+	err  error
+}
+
+type browserResultMsg struct {
 	name string
 	err  error
 }

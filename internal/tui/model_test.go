@@ -219,57 +219,53 @@ func TestShellRequest(t *testing.T) {
 	}
 }
 
-func TestRunRequest(t *testing.T) {
+func TestRunKeyDispatchesCmd(t *testing.T) {
 	m := seedWorkspaceModel()
 	m.cursor = 1
 
 	result, cmd := m.Update(keyRune('r'))
 	m = result.(model)
 
-	if m.runRequest == nil {
-		t.Fatal("expected runRequest to be set")
+	if !m.loading {
+		t.Error("expected loading=true after r")
 	}
-	if m.runRequest.workspace.Name != "ws-two" {
-		t.Errorf("runRequest.workspace.Name = %q, want ws-two", m.runRequest.workspace.Name)
+	if m.err != nil {
+		t.Errorf("unexpected error: %v", m.err)
 	}
-	if m.runRequest.rootPath != "/a" {
-		t.Errorf("runRequest.rootPath = %q, want /a", m.runRequest.rootPath)
-	}
-
-	// Should produce a quit command
 	if cmd == nil {
-		t.Fatal("expected quit cmd")
-	}
-	quitMsg := cmd()
-	if _, ok := quitMsg.(tea.QuitMsg); !ok {
-		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+		t.Error("expected non-nil cmd after r")
 	}
 }
 
-func TestBrowserRequest(t *testing.T) {
+func TestRunKeyErrorIfAlreadyRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[1].Running = true
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('r'))
+	m = result.(model)
+
+	if m.err == nil {
+		t.Error("expected error when running already-running workspace")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when workspace already running")
+	}
+}
+
+func TestBrowserKeyDispatchesCmd(t *testing.T) {
 	m := seedWorkspaceModel()
 	m.cursor = 1
 
 	result, cmd := m.Update(keyRune('b'))
 	m = result.(model)
 
-	if m.browserRequest == nil {
-		t.Fatal("expected browserRequest to be set")
-	}
-	if m.browserRequest.workspace.Name != "ws-two" {
-		t.Errorf("browserRequest.workspace.Name = %q, want ws-two", m.browserRequest.workspace.Name)
-	}
-	if m.browserRequest.rootPath != "/a" {
-		t.Errorf("browserRequest.rootPath = %q, want /a", m.browserRequest.rootPath)
-	}
-
-	// Should produce a quit command
+	// Browser is async — should dispatch a command but NOT quit
 	if cmd == nil {
-		t.Fatal("expected quit cmd")
+		t.Error("expected non-nil cmd after b")
 	}
-	quitMsg := cmd()
-	if _, ok := quitMsg.(tea.QuitMsg); !ok {
-		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	if m.loading {
+		t.Error("browser should not set loading=true")
 	}
 }
 
@@ -362,40 +358,6 @@ func TestArchiveResultCursorClamp(t *testing.T) {
 	}
 }
 
-func TestStartKeyDispatchesCmd(t *testing.T) {
-	m := seedWorkspaceModel()
-	m.cursor = 1
-
-	result, cmd := m.Update(keyRune('S'))
-	m = result.(model)
-
-	if !m.loading {
-		t.Error("expected loading=true after S")
-	}
-	if m.err != nil {
-		t.Errorf("unexpected error: %v", m.err)
-	}
-	if cmd == nil {
-		t.Error("expected non-nil cmd after S")
-	}
-}
-
-func TestStartKeyErrorIfAlreadyRunning(t *testing.T) {
-	m := seedWorkspaceModel()
-	m.workspaces[1].Running = true
-	m.cursor = 1
-
-	result, cmd := m.Update(keyRune('S'))
-	m = result.(model)
-
-	if m.err == nil {
-		t.Error("expected error when starting already-running workspace")
-	}
-	// Should not dispatch a command
-	if cmd != nil {
-		t.Error("expected nil cmd when workspace already running")
-	}
-}
 
 func TestStopKeyDispatchesCmd(t *testing.T) {
 	m := seedWorkspaceModel()

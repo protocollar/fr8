@@ -65,7 +65,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		if tmux.IsRunning(sessionName) {
 			fmt.Printf("Process: running (fr8 ws attach %s)\n", ws.Name)
 		} else {
-			fmt.Printf("Process: not running (fr8 ws start %s)\n", ws.Name)
+			fmt.Printf("Process: not running (fr8 ws run %s)\n", ws.Name)
 		}
 	}
 

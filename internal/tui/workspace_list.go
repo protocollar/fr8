@@ -115,10 +115,9 @@ func renderWorkspaceList(m model) string {
 
 	// Help bar
 	b.WriteString(renderHelpBar([]helpItem{
-		{"S", "start"},
+		{"r", "run"},
 		{"x", "stop"},
 		{"t", "attach"},
-		{"r", "run"},
 		{"s", "shell"},
 		{"b", "browser"},
 		{"a", "archive"},

@@ -85,7 +85,7 @@ func IsRunning(name string) bool {
 }
 
 // Attach replaces the current process with tmux attach.
-// This mirrors the syscall.Exec pattern used by fr8 ws run and shell.
+// This mirrors the syscall.Exec pattern used by fr8 ws shell.
 func Attach(name string) error {
 	if !IsRunning(name) {
 		return fmt.Errorf("session %q is not running", name)

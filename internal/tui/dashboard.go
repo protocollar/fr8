@@ -9,11 +9,9 @@ import (
 
 // DashboardResult holds the outcome of the TUI session.
 type DashboardResult struct {
-	ShellWorkspace   *state.Workspace
-	RunWorkspace     *state.Workspace
-	BrowserWorkspace *state.Workspace
-	AttachWorkspace  *state.Workspace
-	RootPath         string
+	ShellWorkspace  *state.Workspace
+	AttachWorkspace *state.Workspace
+	RootPath        string
 }
 
 // RunDashboard launches the interactive TUI and returns the result.
@@ -31,14 +29,6 @@ func RunDashboard() (*DashboardResult, error) {
 	if fm.shellRequest != nil {
 		result.ShellWorkspace = &fm.shellRequest.workspace
 		result.RootPath = fm.shellRequest.rootPath
-	}
-	if fm.runRequest != nil {
-		result.RunWorkspace = &fm.runRequest.workspace
-		result.RootPath = fm.runRequest.rootPath
-	}
-	if fm.browserRequest != nil {
-		result.BrowserWorkspace = &fm.browserRequest.workspace
-		result.RootPath = fm.browserRequest.rootPath
 	}
 	if fm.attachRequest != nil {
 		result.AttachWorkspace = &fm.attachRequest.workspace

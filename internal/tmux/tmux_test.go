@@ -276,6 +276,68 @@ func TestListFr8SessionsFiltersNonFr8(t *testing.T) {
 	}
 }
 
+func TestStartStopMultiple(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	name1 := "fr8/test-repo/test-multi-ws-1"
+	name2 := "fr8/test-repo/test-multi-ws-2"
+
+	// Ensure clean state
+	Stop(name1)
+	Stop(name2)
+
+	// Start both sessions
+	if err := Start(name1, "/tmp", "sleep 60", nil); err != nil {
+		t.Fatalf("Start(%q) failed: %v", name1, err)
+	}
+	defer Stop(name1)
+
+	if err := Start(name2, "/tmp", "sleep 60", nil); err != nil {
+		t.Fatalf("Start(%q) failed: %v", name2, err)
+	}
+	defer Stop(name2)
+
+	// Both should appear in ListFr8Sessions
+	sessions, err := ListFr8Sessions()
+	if err != nil {
+		t.Fatalf("ListFr8Sessions failed: %v", err)
+	}
+
+	found1, found2 := false, false
+	for _, s := range sessions {
+		if s.Name == name1 {
+			found1 = true
+		}
+		if s.Name == name2 {
+			found2 = true
+		}
+	}
+	if !found1 {
+		t.Errorf("expected to find session %q in list", name1)
+	}
+	if !found2 {
+		t.Errorf("expected to find session %q in list", name2)
+	}
+
+	// Stop both
+	if err := Stop(name1); err != nil {
+		t.Errorf("Stop(%q) failed: %v", name1, err)
+	}
+	if err := Stop(name2); err != nil {
+		t.Errorf("Stop(%q) failed: %v", name2, err)
+	}
+
+	// Neither should be running
+	if IsRunning(name1) {
+		t.Errorf("session %q should not be running after Stop", name1)
+	}
+	if IsRunning(name2) {
+		t.Errorf("session %q should not be running after Stop", name2)
+	}
+}
+
 func TestAttachNotRunning(t *testing.T) {
 	if !tmuxInstalled() {
 		t.Skip("tmux not installed")

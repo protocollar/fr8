@@ -25,11 +25,8 @@ EOF
 # Create a workspace
 fr8 ws new my-feature -b feature/auth
 
-# Start the dev server (foreground)
+# Start the dev server in the background
 fr8 ws run my-feature
-
-# Or start in the background
-fr8 ws start my-feature
 
 # Run a command in the workspace
 fr8 ws exec my-feature -- npm test
@@ -47,9 +44,8 @@ All workspace commands live under `fr8 ws` (alias `fr8 workspace`).
 | `fr8 ws new [name] [-b branch]`       | Create a workspace (worktree + port + file sync + setup) |
 | `fr8 ws list`                         | List all workspaces                                      |
 | `fr8 ws status [name]`                | Show workspace details and environment variables         |
-| `fr8 ws run [name]`                   | Start the dev server (execs into the run script)         |
-| `fr8 ws start [name]`                 | Start the dev server in a background tmux session        |
-| `fr8 ws stop [name]`                  | Stop a workspace's background tmux session               |
+| `fr8 ws run [name] [-A/--all]`        | Run the dev server in a background tmux session          |
+| `fr8 ws stop [name] [-A/--all]`       | Stop a workspace's background tmux session               |
 | `fr8 ws attach [name]`                | Attach to a running background session                   |
 | `fr8 ws logs [name] [-n lines]`       | Show recent output from a background session             |
 | `fr8 ws ps`                           | List all running fr8 workspace sessions                  |
@@ -97,9 +93,8 @@ Falls back to `conductor.json` if `fr8.json` doesn't exist, so projects using [C
 Each workspace is a git worktree with an allocated port range and injected environment variables. The lifecycle is:
 
 1. **`fr8 ws new`** creates a git worktree, allocates a port block, syncs gitignored files (via `.worktreeinclude`), then runs your setup script.
-2. **`fr8 ws run`** execs into your run script with workspace env vars set. The fr8 process is replaced so signals (Ctrl+C) go directly to your dev server.
-3. **`fr8 ws start`** runs the same script in a background tmux session, freeing up your terminal.
-4. **`fr8 ws archive`** auto-stops any running background session, runs your archive script (e.g. drop databases), removes the git worktree, and frees the port.
+2. **`fr8 ws run`** starts your run script in a background tmux session, freeing up your terminal.
+3. **`fr8 ws archive`** auto-stops any running background session, runs your archive script (e.g. drop databases), removes the git worktree, and frees the port.
 
 ### Background Process Management
 
@@ -107,7 +102,7 @@ fr8 uses tmux to run workspaces in the background. This lets you start multiple 
 
 ```bash
 # Start a workspace in the background
-fr8 ws start my-feature
+fr8 ws run my-feature
 
 # See what's running
 fr8 ws ps
@@ -124,7 +119,7 @@ fr8 ws stop my-feature
 
 Sessions are named `fr8/<repo>/<workspace>` (e.g. `fr8/myapp/bright-berlin`). The `fr8 ws list` and `fr8 ws status` commands show running state, and `fr8 ws archive` auto-stops sessions before tearing down.
 
-The TUI dashboard (`fr8 dashboard`) also supports background management: `S` to start, `x` to stop, `t` to attach.
+The TUI dashboard (`fr8 dashboard`) also supports background management: `r` to run, `x` to stop, `t` to attach.
 
 Requires tmux to be installed (`brew install tmux` / `apt install tmux`). All commands that use tmux gracefully degrade when it's not available.
 

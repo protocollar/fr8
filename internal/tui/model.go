@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"runtime"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -27,10 +28,8 @@ type model struct {
 	repoName     string // current repo being viewed
 	rootPath     string // root worktree path for current repo
 	commonDir    string // git common dir for current repo
-	shellRequest   *shellRequestMsg
-	runRequest     *runRequestMsg
-	browserRequest *browserRequestMsg
-	attachRequest  *attachRequestMsg
+	shellRequest  *shellRequestMsg
+	attachRequest *attachRequestMsg
 	archiveIdx   int // workspace index pending archive confirmation
 	width        int
 	height       int
@@ -153,6 +152,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.err = nil
 		return m, nil
+
+	case browserResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -230,24 +235,6 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Run):
 		if len(m.workspaces) > 0 {
 			ws := m.workspaces[m.cursor]
-			m.runRequest = &runRequestMsg{
-				workspace: ws.Workspace,
-				rootPath:  m.rootPath,
-			}
-			return m, tea.Quit
-		}
-	case key.Matches(msg, keys.Browser):
-		if len(m.workspaces) > 0 {
-			ws := m.workspaces[m.cursor]
-			m.browserRequest = &browserRequestMsg{
-				workspace: ws.Workspace,
-				rootPath:  m.rootPath,
-			}
-			return m, tea.Quit
-		}
-	case key.Matches(msg, keys.Start):
-		if len(m.workspaces) > 0 {
-			ws := m.workspaces[m.cursor]
 			if ws.Running {
 				m.err = fmt.Errorf("%q is already running", ws.Workspace.Name)
 				return m, nil
@@ -255,6 +242,11 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.loading = true
 			m.err = nil
 			return m, tea.Batch(startWorkspaceCmd(ws.Workspace, m.rootPath, m.commonDir), m.spinner.Tick)
+		}
+	case key.Matches(msg, keys.Browser):
+		if len(m.workspaces) > 0 {
+			ws := m.workspaces[m.cursor]
+			return m, openBrowserCmd(ws.Workspace)
 		}
 	case key.Matches(msg, keys.Stop):
 		if len(m.workspaces) > 0 {
@@ -271,7 +263,7 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.workspaces) > 0 {
 			ws := m.workspaces[m.cursor]
 			if !ws.Running {
-				m.err = fmt.Errorf("%q is not running (start with S)", ws.Workspace.Name)
+				m.err = fmt.Errorf("%q is not running (run with r)", ws.Workspace.Name)
 				return m, nil
 			}
 			m.attachRequest = &attachRequestMsg{
@@ -454,6 +446,29 @@ func stopWorkspaceCmd(ws state.Workspace, rootPath string) tea.Cmd {
 
 		return stopResultMsg{name: ws.Name}
 	}
+}
+
+func openBrowserCmd(ws state.Workspace) tea.Cmd {
+	return func() tea.Msg {
+		url := fmt.Sprintf("http://localhost:%d", ws.Port)
+		err := openURL(url)
+		return browserResultMsg{name: ws.Name, err: err}
+	}
+}
+
+func openURL(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	default:
+		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
+	}
+	return cmd.Start()
 }
 
 func archiveWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd {
