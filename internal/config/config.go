@@ -54,7 +54,7 @@ func applyDefaults(cfg *Config) {
 		cfg.PortRange = 10
 	}
 	if cfg.BasePort == 0 {
-		cfg.BasePort = 5000
+		cfg.BasePort = 6000
 	}
 	if cfg.WorktreePath == "" {
 		home, err := os.UserHomeDir()
