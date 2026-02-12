@@ -97,6 +97,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case archiveResultMsg:
+		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
 			m.view = viewWorkspaceList
