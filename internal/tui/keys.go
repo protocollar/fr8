@@ -9,6 +9,7 @@ type keyMap struct {
 	Back           key.Binding
 	Archive        key.Binding
 	Shell          key.Binding
+	Open           key.Binding
 	Run            key.Binding
 	Browser        key.Binding
 	Stop           key.Binding
@@ -44,6 +45,10 @@ var keys = keyMap{
 	Shell: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "shell"),
+	),
+	Open: key.NewBinding(
+		key.WithKeys("o"),
+		key.WithHelp("o", "open"),
 	),
 	Run: key.NewBinding(
 		key.WithKeys("r"),

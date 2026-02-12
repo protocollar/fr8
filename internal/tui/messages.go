@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/thomascarr/fr8/internal/opener"
 	"github.com/thomascarr/fr8/internal/registry"
 	"github.com/thomascarr/fr8/internal/state"
 )
@@ -11,6 +12,7 @@ const (
 	viewRepoList viewState = iota
 	viewWorkspaceList
 	viewConfirmArchive
+	viewOpenerPicker
 )
 
 // repoItem is a repo with preloaded workspace count.
@@ -63,6 +65,11 @@ type attachRequestMsg struct {
 	rootPath  string
 }
 
+type openRequestMsg struct {
+	workspace  state.Workspace
+	openerName string
+}
+
 type startResultMsg struct {
 	name string
 	err  error
@@ -88,4 +95,9 @@ type stopAllResultMsg struct {
 	repoName string
 	stopped  int
 	err      error
+}
+
+type openersLoadedMsg struct {
+	openers []opener.Opener
+	err     error
 }

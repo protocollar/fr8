@@ -119,6 +119,7 @@ func renderWorkspaceList(m model) string {
 		{"x", "stop"},
 		{"t", "attach"},
 		{"s", "shell"},
+		{"o", "open"},
 		{"b", "browser"},
 		{"a", "archive"},
 		{"esc", "back"},

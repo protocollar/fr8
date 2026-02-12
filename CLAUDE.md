@@ -30,6 +30,7 @@ cmd/                             # Cobra command definitions (one file per comma
   logs.go, ps.go                 # Background session inspection
   browser.go, dashboard.go       # Browser + interactive TUI
   repo.go                        # `fr8 repo` group (registry management)
+  opener.go                      # `fr8 opener` group (opener management)
   resolve.go                     # Shared resolveWorkspace() helper (local → global fallback)
 internal/
   config/config.go               # Load fr8.json / conductor.json
@@ -41,6 +42,7 @@ internal/
   env/env.go                     # Build FR8_* and CONDUCTOR_* env vars
   workspace/resolve.go           # Resolve workspace by name, CWD, or global registry
   registry/registry.go           # Global repo registry (~/.config/fr8/repos.json)
+  opener/opener.go               # Workspace opener config (~/.config/fr8/openers.json)
   tmux/tmux.go                   # Thin wrapper around tmux CLI for background sessions
   tui/                           # Bubble Tea dashboard TUI
 ```
@@ -51,7 +53,9 @@ internal/
 - Workspace commands live under `fr8 workspace` (alias `fr8 ws`): new, list, status, archive, run, start, stop, attach, logs, ps, shell, cd, exec, browser
 - Workspace resolution: local (CWD git repo) first, falls back to global registry search when a name is given
 - `run`, `exec`, and `attach` commands use `syscall.Exec` to replace the process (clean signal handling)
+- `fr8 ws new` drops into a subshell after creation (`--no-shell` to skip)
 - Background process management uses tmux sessions named `fr8/<repo>/<workspace>`; graceful degradation when tmux is not installed
+- Workspace openers are stored at `~/.config/fr8/openers.json`; TUI picker shown when multiple are configured
 - State is JSON in `.git/fr8.json` with advisory file locking (`syscall.Flock`)
 - Sets both `FR8_*` and `CONDUCTOR_*` env vars for backwards compatibility
 - Config falls back from `fr8.json` → `conductor.json` in the repo root

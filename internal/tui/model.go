@@ -12,6 +12,7 @@ import (
 	"github.com/thomascarr/fr8/internal/config"
 	"github.com/thomascarr/fr8/internal/env"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/opener"
 	"github.com/thomascarr/fr8/internal/port"
 	"github.com/thomascarr/fr8/internal/registry"
 	"github.com/thomascarr/fr8/internal/state"
@@ -19,21 +20,25 @@ import (
 )
 
 type model struct {
-	view         viewState
-	repos        []repoItem
-	workspaces   []workspaceItem
-	cursor       int
-	loading      bool
-	err          error
-	repoName     string // current repo being viewed
-	rootPath     string // root worktree path for current repo
-	commonDir    string // git common dir for current repo
+	view          viewState
+	repos         []repoItem
+	workspaces    []workspaceItem
+	cursor        int
+	loading       bool
+	err           error
+	repoName      string // current repo being viewed
+	rootPath      string // root worktree path for current repo
+	commonDir     string // git common dir for current repo
 	shellRequest  *shellRequestMsg
 	attachRequest *attachRequestMsg
-	archiveIdx   int // workspace index pending archive confirmation
-	width        int
-	height       int
-	spinner      spinner.Model
+	openRequest   *openRequestMsg
+	archiveIdx    int // workspace index pending archive confirmation
+	openers       []opener.Opener
+	openerCursor  int
+	openerWsIdx   int // workspace index for which opener picker was opened
+	width         int
+	height        int
+	spinner       spinner.Model
 }
 
 func newModel() model {
@@ -179,6 +184,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		refreshRunningCounts(m.repos)
 		return m, nil
+
+	case openersLoadedMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		if len(msg.openers) == 0 {
+			m.err = fmt.Errorf("no openers configured — add one with: fr8 opener add <name> <command>")
+			return m, nil
+		}
+		m.openers = msg.openers
+		if len(msg.openers) == 1 {
+			// Single opener — use it directly
+			ws := m.workspaces[m.openerWsIdx]
+			m.openRequest = &openRequestMsg{
+				workspace:  ws.Workspace,
+				openerName: msg.openers[0].Name,
+			}
+			return m, tea.Quit
+		}
+		// Multiple openers — show picker
+		m.openerCursor = 0
+		m.view = viewOpenerPicker
+		return m, nil
 	}
 	return m, nil
 }
@@ -200,6 +230,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleRepoKey(msg)
 	case viewWorkspaceList:
 		return m.handleWorkspaceKey(msg)
+	case viewOpenerPicker:
+		return m.handleOpenerPickerKey(msg)
 	}
 	return m, nil
 }
@@ -317,8 +349,41 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		}
+	case key.Matches(msg, keys.Open):
+		if len(m.workspaces) > 0 {
+			m.openerWsIdx = m.cursor
+			m.loading = true
+			m.err = nil
+			return m, tea.Batch(loadOpenersCmd(), m.spinner.Tick)
+		}
 	case key.Matches(msg, keys.Enter):
 		// Enter does nothing on workspace list (no further drill-down)
+	}
+	return m, nil
+}
+
+func (m model) handleOpenerPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Up):
+		if m.openerCursor > 0 {
+			m.openerCursor--
+		}
+	case key.Matches(msg, keys.Down):
+		if m.openerCursor < len(m.openers)-1 {
+			m.openerCursor++
+		}
+	case key.Matches(msg, keys.Enter):
+		if len(m.openers) > 0 {
+			ws := m.workspaces[m.openerWsIdx]
+			m.openRequest = &openRequestMsg{
+				workspace:  ws.Workspace,
+				openerName: m.openers[m.openerCursor].Name,
+			}
+			return m, tea.Quit
+		}
+	case key.Matches(msg, keys.Back):
+		m.view = viewWorkspaceList
+		m.err = nil
 	}
 	return m, nil
 }
@@ -345,6 +410,8 @@ func (m model) View() string {
 		s = renderWorkspaceList(m)
 	case viewConfirmArchive:
 		s = renderWorkspaceList(m)
+	case viewOpenerPicker:
+		s = renderOpenerPicker(m)
 	}
 	return padToHeight(s, m.height)
 }
@@ -680,6 +747,20 @@ func stopAllGlobalCmd() tea.Cmd {
 		}
 
 		return stopAllResultMsg{stopped: stopped}
+	}
+}
+
+func loadOpenersCmd() tea.Cmd {
+	return func() tea.Msg {
+		path, err := opener.DefaultPath()
+		if err != nil {
+			return openersLoadedMsg{err: err}
+		}
+		openers, err := opener.Load(path)
+		if err != nil {
+			return openersLoadedMsg{err: err}
+		}
+		return openersLoadedMsg{openers: openers}
 	}
 }
 

@@ -41,7 +41,7 @@ All workspace commands live under `fr8 ws` (alias `fr8 workspace`).
 
 | Command                               | Description                                              |
 |---------------------------------------|----------------------------------------------------------|
-| `fr8 ws new [name] [-b branch]`       | Create a workspace (worktree + port + file sync + setup) |
+| `fr8 ws new [name] [-b branch] [--no-shell]` | Create a workspace and drop into a shell (skip with `--no-shell`) |
 | `fr8 ws list`                         | List all workspaces                                      |
 | `fr8 ws status [name]`                | Show workspace details and environment variables         |
 | `fr8 ws run [name] [-A/--all]`        | Run the dev server in a background tmux session          |
@@ -56,6 +56,7 @@ All workspace commands live under `fr8 ws` (alias `fr8 workspace`).
 | `fr8 ws archive [name]`               | Tear down workspace (archive script + remove worktree)   |
 | `fr8 dashboard`                       | Interactive TUI for browsing repos and workspaces        |
 | `fr8 repo add\|list\|remove`          | Manage the global repo registry                          |
+| `fr8 opener add\|list\|remove`        | Manage workspace openers (e.g. VSCode, Cursor)           |
 | `fr8 completion [bash\|zsh\|fish]`    | Generate shell completions                               |
 
 When `[name]` is omitted, fr8 auto-detects the current workspace from your working directory. When a name is provided, it also works from outside a git repo by searching all registered repos.
@@ -92,7 +93,7 @@ Falls back to `conductor.json` if `fr8.json` doesn't exist, so projects using [C
 
 Each workspace is a git worktree with an allocated port range and injected environment variables. The lifecycle is:
 
-1. **`fr8 ws new`** creates a git worktree, allocates a port block, syncs gitignored files (via `.worktreeinclude`), then runs your setup script.
+1. **`fr8 ws new`** creates a git worktree, allocates a port block, syncs gitignored files (via `.worktreeinclude`), runs your setup script, then drops you into a subshell in the new workspace. Use `--no-shell` to skip the shell (useful for scripting).
 2. **`fr8 ws run`** starts your run script in a background tmux session, freeing up your terminal.
 3. **`fr8 ws archive`** auto-stops any running background session, runs your archive script (e.g. drop databases), removes the git worktree, and frees the port.
 
@@ -119,9 +120,30 @@ fr8 ws stop my-feature
 
 Sessions are named `fr8/<repo>/<workspace>` (e.g. `fr8/myapp/bright-berlin`). The `fr8 ws list` and `fr8 ws status` commands show running state, and `fr8 ws archive` auto-stops sessions before tearing down.
 
-The TUI dashboard (`fr8 dashboard`) also supports background management: `r` to run, `x` to stop, `t` to attach.
+The TUI dashboard (`fr8 dashboard`) also supports background management: `r` to run, `x` to stop, `t` to attach, `o` to open in a configured opener.
 
 Requires tmux to be installed (`brew install tmux` / `apt install tmux`). All commands that use tmux gracefully degrade when it's not available.
+
+### Workspace Openers
+
+Configure external tools for opening workspaces directly from the TUI dashboard:
+
+```bash
+# Add openers (executable must be in $PATH)
+fr8 opener add rubymine
+fr8 opener add vscode code    # name differs from executable
+fr8 opener add cursor
+
+# List configured openers
+fr8 opener list
+
+# Remove an opener
+fr8 opener remove cursor
+```
+
+In the dashboard, press `o` on a workspace to open it. If you have one opener configured, it's used directly. With multiple openers, a picker lets you choose.
+
+Opener configuration is stored at `~/.config/fr8/openers.json`.
 
 ### Environment Variables
 

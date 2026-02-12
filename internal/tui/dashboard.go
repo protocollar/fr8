@@ -11,6 +11,8 @@ import (
 type DashboardResult struct {
 	ShellWorkspace  *state.Workspace
 	AttachWorkspace *state.Workspace
+	OpenWorkspace   *state.Workspace
+	OpenerName      string
 	RootPath        string
 }
 
@@ -33,6 +35,10 @@ func RunDashboard() (*DashboardResult, error) {
 	if fm.attachRequest != nil {
 		result.AttachWorkspace = &fm.attachRequest.workspace
 		result.RootPath = fm.attachRequest.rootPath
+	}
+	if fm.openRequest != nil {
+		result.OpenWorkspace = &fm.openRequest.workspace
+		result.OpenerName = fm.openRequest.openerName
 	}
 	return result, nil
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/thomascarr/fr8/internal/opener"
 	"github.com/thomascarr/fr8/internal/registry"
 	"github.com/thomascarr/fr8/internal/state"
 )
@@ -704,6 +705,204 @@ func TestRepoRunAllNoOpOnEmptyList(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Error("should not dispatch cmd on empty repo list")
+	}
+}
+
+func TestOpenKeyDispatchesLoadOpeners(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('o'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after o")
+	}
+	if m.openerWsIdx != 1 {
+		t.Errorf("openerWsIdx = %d, want 1", m.openerWsIdx)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after o")
+	}
+}
+
+func TestOpenKeyNoOpOnEmptyWorkspaces(t *testing.T) {
+	m := model{view: viewWorkspaceList, workspaces: nil}
+
+	result, cmd := m.Update(keyRune('o'))
+	m = result.(model)
+
+	if m.loading {
+		t.Error("should not set loading on empty workspace list")
+	}
+	if cmd != nil {
+		t.Error("should not dispatch cmd on empty workspace list")
+	}
+}
+
+func TestOpenersLoadedSingleOpenerQuitsDirectly(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.openerWsIdx = 1
+
+	result, cmd := m.Update(openersLoadedMsg{
+		openers: []opener.Opener{{Name: "vscode", Command: "code"}},
+	})
+	m = result.(model)
+
+	if m.openRequest == nil {
+		t.Fatal("expected openRequest to be set for single opener")
+	}
+	if m.openRequest.workspace.Name != "ws-two" {
+		t.Errorf("openRequest.workspace.Name = %q, want ws-two", m.openRequest.workspace.Name)
+	}
+	if m.openRequest.openerName != "vscode" {
+		t.Errorf("openRequest.openerName = %q, want vscode", m.openRequest.openerName)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestOpenersLoadedMultipleShowsPicker(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.openerWsIdx = 0
+
+	m = updateModel(m, openersLoadedMsg{
+		openers: []opener.Opener{
+			{Name: "vscode", Command: "code"},
+			{Name: "cursor", Command: "cursor"},
+		},
+	})
+
+	if m.loading {
+		t.Error("expected loading=false")
+	}
+	if m.view != viewOpenerPicker {
+		t.Errorf("view = %d, want viewOpenerPicker", m.view)
+	}
+	if len(m.openers) != 2 {
+		t.Errorf("openers count = %d, want 2", len(m.openers))
+	}
+	if m.openerCursor != 0 {
+		t.Errorf("openerCursor = %d, want 0", m.openerCursor)
+	}
+}
+
+func TestOpenersLoadedEmptyShowsError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, openersLoadedMsg{openers: nil})
+
+	if m.loading {
+		t.Error("expected loading=false")
+	}
+	if m.err == nil {
+		t.Error("expected error for empty openers")
+	}
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList", m.view)
+	}
+}
+
+func TestOpenersLoadedWithError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, openersLoadedMsg{err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+func TestOpenerPickerNavigation(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewOpenerPicker
+	m.openerWsIdx = 0
+	m.openers = []opener.Opener{
+		{Name: "vscode", Command: "code"},
+		{Name: "cursor", Command: "cursor"},
+		{Name: "terminal", Command: "open"},
+	}
+	m.openerCursor = 0
+
+	// Down
+	m = updateModel(m, keyRune('j'))
+	if m.openerCursor != 1 {
+		t.Errorf("after j: openerCursor = %d, want 1", m.openerCursor)
+	}
+
+	m = updateModel(m, keyRune('j'))
+	if m.openerCursor != 2 {
+		t.Errorf("after j j: openerCursor = %d, want 2", m.openerCursor)
+	}
+
+	// Clamp at bottom
+	m = updateModel(m, keyRune('j'))
+	if m.openerCursor != 2 {
+		t.Errorf("after j at bottom: openerCursor = %d, want 2", m.openerCursor)
+	}
+
+	// Up
+	m = updateModel(m, keyRune('k'))
+	if m.openerCursor != 1 {
+		t.Errorf("after k: openerCursor = %d, want 1", m.openerCursor)
+	}
+}
+
+func TestOpenerPickerSelectQuitsWithRequest(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewOpenerPicker
+	m.openerWsIdx = 1
+	m.openers = []opener.Opener{
+		{Name: "vscode", Command: "code"},
+		{Name: "cursor", Command: "cursor"},
+	}
+	m.openerCursor = 1
+
+	result, cmd := m.Update(keyEnter())
+	m = result.(model)
+
+	if m.openRequest == nil {
+		t.Fatal("expected openRequest to be set")
+	}
+	if m.openRequest.workspace.Name != "ws-two" {
+		t.Errorf("workspace = %q, want ws-two", m.openRequest.workspace.Name)
+	}
+	if m.openRequest.openerName != "cursor" {
+		t.Errorf("openerName = %q, want cursor", m.openRequest.openerName)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestOpenerPickerEscGoesBack(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewOpenerPicker
+	m.openerWsIdx = 0
+	m.openers = []opener.Opener{
+		{Name: "vscode", Command: "code"},
+	}
+
+	m = updateModel(m, keyEsc())
+
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after Esc", m.view)
 	}
 }
 

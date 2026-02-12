@@ -20,11 +20,13 @@ import (
 
 var newBranch string
 var noSetup bool
+var noShell bool
 var newRepo string
 
 func init() {
 	newCmd.Flags().StringVarP(&newBranch, "branch", "b", "", "branch name (creates new branch if it doesn't exist)")
 	newCmd.Flags().BoolVar(&noSetup, "no-setup", false, "skip running the setup script")
+	newCmd.Flags().BoolVar(&noShell, "no-shell", false, "skip dropping into a workspace shell after creation")
 	newCmd.Flags().StringVar(&newRepo, "repo", "", "create workspace in a registered repo (by name)")
 	newCmd.RegisterFlagCompletionFunc("repo", repoNameCompletion)
 	workspaceCmd.AddCommand(newCmd)
@@ -197,6 +199,36 @@ func runNew(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Branch: %s\n", ws.Branch)
 	fmt.Printf("  Port:   %d\n", ws.Port)
 	fmt.Printf("  Path:   %s\n", ws.Path)
+
+	// Drop into a subshell in the new workspace
+	if !noShell {
+		fmt.Println()
+		fmt.Printf("Entering workspace %q...\n", ws.Name)
+		fmt.Println("Type 'exit' to leave the workspace shell.")
+		fmt.Println()
+
+		envVars := env.Build(&ws, rootPath, defaultBranch)
+
+		userShell := os.Getenv("SHELL")
+		if userShell == "" {
+			userShell = "/bin/bash"
+		}
+
+		c := exec.Command(userShell)
+		c.Dir = ws.Path
+		c.Env = envVars
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		c.Stdin = os.Stdin
+
+		if err := c.Run(); err != nil {
+			if _, ok := err.(*exec.ExitError); !ok {
+				return err
+			}
+		}
+
+		fmt.Printf("\nLeft workspace %q.\n", ws.Name)
+	}
 
 	return nil
 }
