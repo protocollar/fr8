@@ -2,11 +2,16 @@ package tmux
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 )
+
+// execFunc is the function used to replace the current process.
+// Defaults to syscall.Exec; overridden in tests.
+var execFunc = syscall.Exec
 
 // Session represents a running fr8 tmux session.
 type Session struct {
@@ -96,7 +101,7 @@ func Attach(name string) error {
 		return fmt.Errorf("tmux not found: %w", err)
 	}
 
-	return syscall.Exec(tmuxPath, []string{"tmux", "attach-session", "-t", name}, nil)
+	return execFunc(tmuxPath, []string{"tmux", "attach-session", "-t", name}, os.Environ())
 }
 
 // CapturePanes captures recent output from a tmux session's pane.

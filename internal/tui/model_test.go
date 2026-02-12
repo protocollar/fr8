@@ -162,6 +162,9 @@ func TestArchiveConfirmFlow(t *testing.T) {
 
 	// Simulate archive result
 	m = updateModel(m, archiveResultMsg{name: "ws-two"})
+	if m.loading {
+		t.Error("expected loading=false after archiveResultMsg")
+	}
 	if len(m.workspaces) != 2 {
 		t.Errorf("workspaces count = %d, want 2", len(m.workspaces))
 	}
@@ -344,6 +347,69 @@ func TestWorkspacesLoadedMsg(t *testing.T) {
 	}
 	if len(m.workspaces) != 1 {
 		t.Errorf("workspaces count = %d, want 1", len(m.workspaces))
+	}
+}
+
+func TestArchiveResultClearsLoading(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true // simulates state after confirming archive
+
+	m = updateModel(m, archiveResultMsg{name: "ws-one"})
+
+	if m.loading {
+		t.Error("expected loading=false after archiveResultMsg")
+	}
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList", m.view)
+	}
+}
+
+func TestArchiveLastWorkspaceClearsLoading(t *testing.T) {
+	m := model{
+		view:      viewWorkspaceList,
+		loading:   true,
+		repoName:  "alpha",
+		rootPath:  "/a",
+		commonDir: "/a/.git",
+		repos: []repoItem{
+			{Repo: registry.Repo{Name: "alpha", Path: "/a"}, WorkspaceCount: 1},
+		},
+		workspaces: []workspaceItem{
+			{Workspace: state.Workspace{Name: "only-ws", Branch: "feat-1", Port: 3000}},
+		},
+		cursor: 0,
+	}
+
+	m = updateModel(m, archiveResultMsg{name: "only-ws"})
+
+	if m.loading {
+		t.Error("expected loading=false after archiving last workspace")
+	}
+	if len(m.workspaces) != 0 {
+		t.Errorf("workspaces count = %d, want 0", len(m.workspaces))
+	}
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList", m.view)
+	}
+	if m.cursor != 0 {
+		t.Errorf("cursor = %d, want 0", m.cursor)
+	}
+}
+
+func TestArchiveResultWithError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, archiveResultMsg{name: "ws-one", err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false after archive error")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+	if len(m.workspaces) != 3 {
+		t.Errorf("workspaces count = %d, want 3 (unchanged after error)", len(m.workspaces))
 	}
 }
 
