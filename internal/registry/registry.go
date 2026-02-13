@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
+
+	"github.com/thomascarr/fr8/internal/flock"
 )
 
 // Repo is a registered repository.
@@ -64,10 +65,10 @@ func (r *Registry) Save(path string) error {
 	defer f.Close()
 	defer os.Remove(path + ".lock")
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := flock.Lock(f.Fd()); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer flock.Unlock(f.Fd())
 
 	return os.WriteFile(path, data, 0644)
 }

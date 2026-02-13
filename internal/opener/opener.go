@@ -7,7 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
+
+	"github.com/thomascarr/fr8/internal/flock"
 )
 
 // Opener defines a named command for opening a workspace in an external tool.
@@ -62,10 +63,10 @@ func Save(path string, openers []Opener) error {
 	defer f.Close()
 	defer os.Remove(path + ".lock")
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := flock.Lock(f.Fd()); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer flock.Unlock(f.Fd())
 
 	return os.WriteFile(path, data, 0644)
 }

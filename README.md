@@ -8,6 +8,8 @@ Git worktree workspace manager. Creates isolated development environments with p
 go install github.com/thomascarr/fr8@latest
 ```
 
+**Supported platforms:** macOS, Linux. Windows is not currently supported.
+
 ## Quick Start
 
 ```bash
@@ -393,6 +395,10 @@ bin/rails db:prepare
 RAILS_ENV=test bin/rails db:prepare
 redis-cli -p "$REDIS_PORT" shutdown nosave
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
