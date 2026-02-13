@@ -27,7 +27,7 @@
       "Bash(cat:*)",
       "Bash(mkdir:*)",
       "Bash(xargs:*)",
-      "mcp__context7__*",
+      "Bash(golangci-lint:*)",
       "mcp__claude-in-chrome__*",
       "mcp__playwright__*"
     ],
