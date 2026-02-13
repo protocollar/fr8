@@ -118,14 +118,20 @@ func TestStartStopLifecycle(t *testing.T) {
 	name := "fr8/test-repo/test-lifecycle-ws"
 
 	// Ensure clean state
-	Stop(name)
+	if err := Stop(name); err != nil {
+		t.Fatal(err)
+	}
 
 	// Start a simple session
 	err := Start(name, "/tmp", "sleep 60", nil)
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer Stop(name)
+	defer func() {
+		if err := Stop(name); err != nil {
+			t.Logf("cleanup Stop failed: %v", err)
+		}
+	}()
 
 	// Should be running
 	if !IsRunning(name) {
@@ -157,7 +163,9 @@ func TestStartWithEnvVars(t *testing.T) {
 	name := "fr8/test-repo/test-env-ws"
 
 	// Ensure clean state
-	Stop(name)
+	if err := Stop(name); err != nil {
+		t.Fatal(err)
+	}
 
 	envVars := []string{
 		"FR8_PORT=5000",
@@ -168,7 +176,11 @@ func TestStartWithEnvVars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start with env vars failed: %v", err)
 	}
-	defer Stop(name)
+	defer func() {
+		if err := Stop(name); err != nil {
+			t.Logf("cleanup Stop failed: %v", err)
+		}
+	}()
 
 	if !IsRunning(name) {
 		t.Error("session should be running")
@@ -183,14 +195,20 @@ func TestCapturePanes(t *testing.T) {
 	name := "fr8/test-repo/test-capture-ws"
 
 	// Ensure clean state
-	Stop(name)
+	if err := Stop(name); err != nil {
+		t.Fatal(err)
+	}
 
 	// Use a long-running command so the session stays alive
 	err := Start(name, "/tmp", "sleep 60", nil)
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer Stop(name)
+	defer func() {
+		if err := Stop(name); err != nil {
+			t.Logf("cleanup Stop failed: %v", err)
+		}
+	}()
 
 	// Give tmux a moment to initialize the session
 	time.Sleep(200 * time.Millisecond)
@@ -221,14 +239,20 @@ func TestListFr8Sessions(t *testing.T) {
 	name := "fr8/test-repo/test-list-ws"
 
 	// Ensure clean state
-	Stop(name)
+	if err := Stop(name); err != nil {
+		t.Fatal(err)
+	}
 
 	// Start a session so there's something to find
 	err := Start(name, "/tmp", "sleep 60", nil)
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer Stop(name)
+	defer func() {
+		if err := Stop(name); err != nil {
+			t.Logf("cleanup Stop failed: %v", err)
+		}
+	}()
 
 	sessions, err := ListFr8Sessions()
 	if err != nil {
@@ -263,7 +287,7 @@ func TestListFr8SessionsFiltersNonFr8(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Skipf("could not create test session: %v", err)
 	}
-	defer exec.Command("tmux", "kill-session", "-t", nonFr8).Run()
+	defer func() { _ = exec.Command("tmux", "kill-session", "-t", nonFr8).Run() }()
 
 	sessions, err := ListFr8Sessions()
 	if err != nil {
@@ -286,19 +310,31 @@ func TestStartStopMultiple(t *testing.T) {
 	name2 := "fr8/test-repo/test-multi-ws-2"
 
 	// Ensure clean state
-	Stop(name1)
-	Stop(name2)
+	if err := Stop(name1); err != nil {
+		t.Fatal(err)
+	}
+	if err := Stop(name2); err != nil {
+		t.Fatal(err)
+	}
 
 	// Start both sessions
 	if err := Start(name1, "/tmp", "sleep 60", nil); err != nil {
 		t.Fatalf("Start(%q) failed: %v", name1, err)
 	}
-	defer Stop(name1)
+	defer func() {
+		if err := Stop(name1); err != nil {
+			t.Logf("cleanup Stop(%q) failed: %v", name1, err)
+		}
+	}()
 
 	if err := Start(name2, "/tmp", "sleep 60", nil); err != nil {
 		t.Fatalf("Start(%q) failed: %v", name2, err)
 	}
-	defer Stop(name2)
+	defer func() {
+		if err := Stop(name2); err != nil {
+			t.Logf("cleanup Stop(%q) failed: %v", name2, err)
+		}
+	}()
 
 	// Both should appear in ListFr8Sessions
 	sessions, err := ListFr8Sessions()
@@ -345,12 +381,18 @@ func TestAttachPassesEnvironment(t *testing.T) {
 	}
 
 	name := "fr8/test-repo/test-attach-env-ws"
-	Stop(name)
+	if err := Stop(name); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := Start(name, "/tmp", "sleep 60", nil); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer Stop(name)
+	defer func() {
+		if err := Stop(name); err != nil {
+			t.Logf("cleanup Stop failed: %v", err)
+		}
+	}()
 
 	var capturedEnv []string
 	origExec := execFunc
@@ -393,15 +435,27 @@ func TestRenameSession(t *testing.T) {
 	newName := "fr8/test-repo/test-rename-new"
 
 	// Ensure clean state
-	Stop(oldName)
-	Stop(newName)
+	if err := Stop(oldName); err != nil {
+		t.Fatal(err)
+	}
+	if err := Stop(newName); err != nil {
+		t.Fatal(err)
+	}
 
 	// Start a session with the old name
 	if err := Start(oldName, "/tmp", "sleep 60", nil); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer Stop(oldName)
-	defer Stop(newName)
+	defer func() {
+		if err := Stop(oldName); err != nil {
+			t.Logf("cleanup Stop(%q) failed: %v", oldName, err)
+		}
+	}()
+	defer func() {
+		if err := Stop(newName); err != nil {
+			t.Logf("cleanup Stop(%q) failed: %v", newName, err)
+		}
+	}()
 
 	// Rename it
 	if err := RenameSession(oldName, newName); err != nil {

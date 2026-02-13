@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -106,7 +107,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(jsonout.MsgOut(), "PR #%s → branch %s\n", newPR, resolved)
+		_, _ = fmt.Fprintf(jsonout.MsgOut(), "PR #%s → branch %s\n", newPR, resolved)
 		branch = resolved
 		trackRemote = true
 	} else if newRemote != "" {
@@ -175,7 +176,7 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 						Workspace *state.Workspace `json:"workspace"`
 					}{Action: "already_exists", Workspace: existing})
 				}
-				fmt.Fprintf(jsonout.MsgOut(), "Workspace %q already exists.\n", wsName)
+				_, _ = fmt.Fprintf(jsonout.MsgOut(), "Workspace %q already exists.\n", wsName)
 				return existing, nil
 			}
 			return nil, fmt.Errorf("workspace %q already exists", wsName)
@@ -192,7 +193,7 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 
 	startPoint := ""
 	remoteRef := "origin/" + defaultBranch
-	fmt.Fprintf(jsonout.MsgOut(), "Fetching latest from origin...\n")
+	_, _ = fmt.Fprintf(jsonout.MsgOut(), "Fetching latest from origin...\n")
 	if err := git.Fetch(rootPath, "origin"); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: git fetch failed: %v\n", err)
 	}
@@ -202,24 +203,25 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 
 	// Branch resolution
 	createBranch := false
-	if branch == "" {
+	switch {
+	case branch == "":
 		branch = wsName
 		createBranch = true
-	} else if trackRemote {
+	case trackRemote:
 		// --remote or --pr: create local tracking branch from origin/<branch>
 		remoteBranch := "origin/" + branch
 		if !git.RemoteRefExists(rootPath, remoteBranch) {
 			return nil, fmt.Errorf("remote branch %s not found (did you forget to push?)", remoteBranch)
 		}
 		if !git.BranchExists(rootPath, branch) {
-			fmt.Fprintf(jsonout.MsgOut(), "Creating local branch %s tracking %s\n", branch, remoteBranch)
+			_, _ = fmt.Fprintf(jsonout.MsgOut(), "Creating local branch %s tracking %s\n", branch, remoteBranch)
 			if err := git.CreateTrackingBranch(rootPath, branch, remoteBranch); err != nil {
 				return nil, fmt.Errorf("creating tracking branch: %w", err)
 			}
 		}
 		startPoint = ""
 		createBranch = false
-	} else {
+	default:
 		// -b: create new local branch if it doesn't exist
 		if !git.BranchExists(rootPath, branch) {
 			createBranch = true
@@ -262,7 +264,7 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 	}
 
 	// Create worktree
-	fmt.Fprintf(jsonout.MsgOut(), "Creating workspace %q...\n", wsName)
+	_, _ = fmt.Fprintf(jsonout.MsgOut(), "Creating workspace %q...\n", wsName)
 	if err := os.MkdirAll(wtBase, 0755); err != nil {
 		return nil, fmt.Errorf("creating worktree directory: %w", err)
 	}
@@ -281,11 +283,11 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 
 	if err := st.Add(ws); err != nil {
 		// Clean up worktree on state failure
-		git.WorktreeRemove(rootPath, wsPath)
+		_ = git.WorktreeRemove(rootPath, wsPath)
 		return nil, fmt.Errorf("saving workspace: %w", err)
 	}
 	if err := st.Save(commonDir); err != nil {
-		git.WorktreeRemove(rootPath, wsPath)
+		_ = git.WorktreeRemove(rootPath, wsPath)
 		return nil, fmt.Errorf("saving state: %w", err)
 	}
 
@@ -293,14 +295,14 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 	autoRegisterRepo(rootPath)
 
 	// Sync files
-	fmt.Fprintf(jsonout.MsgOut(), "Syncing files...\n")
+	_, _ = fmt.Fprintf(jsonout.MsgOut(), "Syncing files...\n")
 	if err := filesync.Sync(rootPath, wsPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: file sync failed: %v\n", err)
 	}
 
 	// Run setup script
 	if runSetup && cfg.Scripts.Setup != "" {
-		fmt.Fprintf(jsonout.MsgOut(), "Running setup script: %s\n", cfg.Scripts.Setup)
+		_, _ = fmt.Fprintf(jsonout.MsgOut(), "Running setup script: %s\n", cfg.Scripts.Setup)
 		envVars := env.Build(&ws, rootPath, defaultBranch)
 		if err := runScript(cfg.Scripts.Setup, wsPath, envVars); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: setup script failed: %v\n", err)
@@ -346,7 +348,8 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 		c.Stdin = os.Stdin
 
 		if err := c.Run(); err != nil {
-			if _, ok := err.(*exec.ExitError); !ok {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
 				return &ws, err
 			}
 		}

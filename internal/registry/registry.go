@@ -62,13 +62,13 @@ func (r *Registry) Save(path string) error {
 	if err != nil {
 		return fmt.Errorf("creating lock file: %w", err)
 	}
-	defer f.Close()
-	defer os.Remove(path + ".lock")
+	defer func() { _ = f.Close() }()
+	defer func() { _ = os.Remove(path + ".lock") }()
 
 	if err := flock.Lock(f.Fd()); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer flock.Unlock(f.Fd())
+	defer func() { _ = flock.Unlock(f.Fd()) }()
 
 	return os.WriteFile(path, data, 0644)
 }

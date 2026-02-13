@@ -202,8 +202,12 @@ func TestRunSkillInstall(t *testing.T) {
 
 		// Create the file first
 		targetDir := filepath.Join(dir, "fr8")
-		os.MkdirAll(targetDir, 0755)
-		os.WriteFile(filepath.Join(targetDir, "SKILL.md"), []byte("existing"), 0644)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(targetDir, "SKILL.md"), []byte("existing"), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		err := runSkillInstall(nil, nil)
 		if err == nil {
@@ -223,8 +227,12 @@ func TestRunSkillInstall(t *testing.T) {
 
 		// Create the file first
 		targetDir := filepath.Join(dir, "fr8")
-		os.MkdirAll(targetDir, 0755)
-		os.WriteFile(filepath.Join(targetDir, "SKILL.md"), []byte("old"), 0644)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(targetDir, "SKILL.md"), []byte("old"), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		if err := runSkillInstall(nil, nil); err != nil {
 			t.Fatalf("runSkillInstall() with --force error = %v", err)

@@ -129,7 +129,7 @@ func runArchive(cmd *cobra.Command, args []string) error {
 			fmt.Printf("\nContinue? [y/N] ")
 
 			var response string
-			fmt.Scanln(&response)
+			_, _ = fmt.Scanln(&response)
 			if response != "y" && response != "Y" {
 				fmt.Println("Cancelled.")
 				return nil
@@ -141,7 +141,7 @@ func runArchive(cmd *cobra.Command, args []string) error {
 	if tmux.Available() == nil {
 		sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
 		if tmux.IsRunning(sessionName) {
-			fmt.Fprintf(jsonout.MsgOut(), "Stopping background session...\n")
+			_, _ = fmt.Fprintf(jsonout.MsgOut(), "Stopping background session...\n")
 			if err := tmux.Stop(sessionName); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to stop tmux session: %v\n", err)
 			}
@@ -151,7 +151,7 @@ func runArchive(cmd *cobra.Command, args []string) error {
 	// Run archive script
 	defaultBranch, _ := git.DefaultBranch(rootPath)
 	if cfg.Scripts.Archive != "" {
-		fmt.Fprintf(jsonout.MsgOut(), "Running archive script: %s\n", cfg.Scripts.Archive)
+		_, _ = fmt.Fprintf(jsonout.MsgOut(), "Running archive script: %s\n", cfg.Scripts.Archive)
 		envVars := env.Build(ws, rootPath, defaultBranch)
 		if err := runScript(cfg.Scripts.Archive, ws.Path, envVars); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: archive script failed: %v\n", err)
@@ -159,14 +159,14 @@ func runArchive(cmd *cobra.Command, args []string) error {
 	}
 
 	// Remove worktree
-	fmt.Fprintf(jsonout.MsgOut(), "Removing worktree...\n")
+	_, _ = fmt.Fprintf(jsonout.MsgOut(), "Removing worktree...\n")
 	if err := git.WorktreeRemove(rootPath, ws.Path); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to remove worktree: %v\n", err)
 		fmt.Fprintln(os.Stderr, "You may need to remove it manually: git worktree remove", ws.Path)
 	}
 
 	// Update state
-	st.Remove(ws.Name)
+	_ = st.Remove(ws.Name)
 	if err := st.Save(commonDir); err != nil {
 		return fmt.Errorf("saving state: %w", err)
 	}

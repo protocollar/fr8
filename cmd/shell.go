@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -66,7 +67,8 @@ func runShell(cmd *cobra.Command, args []string) error {
 
 	if err := c.Run(); err != nil {
 		// Non-zero exit from the shell is normal (user typed exit)
-		if _, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			return nil
 		}
 		return err

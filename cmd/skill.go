@@ -185,7 +185,7 @@ func runSkillInstall(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	fmt.Fprintf(jsonout.MsgOut(), "Installed %s skill to %s\n", skillName, targetFile)
+	_, _ = fmt.Fprintf(jsonout.MsgOut(), "Installed %s skill to %s\n", skillName, targetFile)
 	return nil
 }
 

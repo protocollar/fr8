@@ -60,13 +60,13 @@ func Save(path string, openers []Opener) error {
 	if err != nil {
 		return fmt.Errorf("creating lock file: %w", err)
 	}
-	defer f.Close()
-	defer os.Remove(path + ".lock")
+	defer func() { _ = f.Close() }()
+	defer func() { _ = os.Remove(path + ".lock") }()
 
 	if err := flock.Lock(f.Fd()); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer flock.Unlock(f.Fd())
+	defer func() { _ = flock.Unlock(f.Fd()) }()
 
 	return os.WriteFile(path, data, 0644)
 }
@@ -120,7 +120,9 @@ func Run(o Opener, workspacePath string) error {
 	if err != nil {
 		return fmt.Errorf("%s: executable not found in $PATH (check that it is installed and on your PATH)", parts[0])
 	}
-	args := append(parts[1:], workspacePath)
+	args := make([]string, len(parts)-1, len(parts))
+	copy(args, parts[1:])
+	args = append(args, workspacePath)
 	cmd := exec.Command(binPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

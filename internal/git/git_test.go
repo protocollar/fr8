@@ -254,7 +254,9 @@ func TestHasUncommittedChangesIntegration(t *testing.T) {
 	}
 
 	// Create an untracked file
-	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("hello"), 0644)
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	dirty, err = HasUncommittedChanges(dir)
 	if err != nil {

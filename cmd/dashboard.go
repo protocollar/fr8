@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -64,7 +65,8 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 			c.Stdin = os.Stdin
 
 			if err := c.Run(); err != nil {
-				if _, ok := err.(*exec.ExitError); !ok {
+				var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
 					return err
 				}
 			}

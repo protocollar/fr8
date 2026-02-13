@@ -27,7 +27,9 @@ func TestAddAndFind(t *testing.T) {
 func TestAddDuplicate(t *testing.T) {
 	s := &State{}
 	ws := Workspace{Name: "test-ws"}
-	s.Add(ws)
+	if err := s.Add(ws); err != nil {
+		t.Fatal(err)
+	}
 
 	err := s.Add(ws)
 	if err == nil {
@@ -37,9 +39,15 @@ func TestAddDuplicate(t *testing.T) {
 
 func TestRemove(t *testing.T) {
 	s := &State{}
-	s.Add(Workspace{Name: "a"})
-	s.Add(Workspace{Name: "b"})
-	s.Add(Workspace{Name: "c"})
+	if err := s.Add(Workspace{Name: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(Workspace{Name: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(Workspace{Name: "c"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := s.Remove("b"); err != nil {
 		t.Fatal(err)
@@ -152,8 +160,12 @@ func TestNames(t *testing.T) {
 
 func TestRename(t *testing.T) {
 	s := &State{}
-	s.Add(Workspace{Name: "alpha"})
-	s.Add(Workspace{Name: "beta"})
+	if err := s.Add(Workspace{Name: "alpha"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(Workspace{Name: "beta"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := s.Rename("alpha", "gamma"); err != nil {
 		t.Fatal(err)
@@ -179,8 +191,12 @@ func TestRenameNotFound(t *testing.T) {
 
 func TestRenameAlreadyExists(t *testing.T) {
 	s := &State{}
-	s.Add(Workspace{Name: "alpha"})
-	s.Add(Workspace{Name: "beta"})
+	if err := s.Add(Workspace{Name: "alpha"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(Workspace{Name: "beta"}); err != nil {
+		t.Fatal(err)
+	}
 
 	err := s.Rename("alpha", "beta")
 	if err == nil {
@@ -190,7 +206,9 @@ func TestRenameAlreadyExists(t *testing.T) {
 
 func TestRenameSameName(t *testing.T) {
 	s := &State{}
-	s.Add(Workspace{Name: "alpha"})
+	if err := s.Add(Workspace{Name: "alpha"}); err != nil {
+		t.Fatal(err)
+	}
 
 	err := s.Rename("alpha", "alpha")
 	if err == nil {
@@ -243,7 +261,9 @@ func TestLoadMissing(t *testing.T) {
 
 func TestLoadMalformed(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "fr8.json"), []byte(`{broken`), 0644)
+	if err := os.WriteFile(filepath.Join(dir, "fr8.json"), []byte(`{broken`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := Load(dir)
 	if err == nil {

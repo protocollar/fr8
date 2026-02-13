@@ -9,7 +9,7 @@ import (
 func TestParseIncludeFile(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, ".worktreeinclude")
-	os.WriteFile(f, []byte(`# comment
+	if err := os.WriteFile(f, []byte(`# comment
 .env*
 
 # another comment
@@ -17,7 +17,9 @@ config/master.key
 config/credentials/*.key
 
 .mcp.json
-`), 0644)
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	patterns, err := parseIncludeFile(f)
 	if err != nil {
@@ -38,7 +40,9 @@ config/credentials/*.key
 func TestParseIncludeFileEmpty(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, ".worktreeinclude")
-	os.WriteFile(f, []byte("# only comments\n\n# nothing here\n"), 0644)
+	if err := os.WriteFile(f, []byte("# only comments\n\n# nothing here\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	patterns, err := parseIncludeFile(f)
 	if err != nil {
@@ -55,9 +59,15 @@ func TestFilesEqual(t *testing.T) {
 	b := filepath.Join(dir, "b")
 	c := filepath.Join(dir, "c")
 
-	os.WriteFile(a, []byte("hello"), 0644)
-	os.WriteFile(b, []byte("hello"), 0644)
-	os.WriteFile(c, []byte("world"), 0644)
+	if err := os.WriteFile(a, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(c, []byte("world"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	if !filesEqual(a, b) {
 		t.Error("expected a and b to be equal")
@@ -75,13 +85,23 @@ func TestSyncCopiesFiles(t *testing.T) {
 	worktree := t.TempDir()
 
 	// Create source files
-	os.WriteFile(filepath.Join(root, ".env"), []byte("SECRET=123"), 0644)
-	os.WriteFile(filepath.Join(root, ".env.local"), []byte("LOCAL=yes"), 0644)
-	os.MkdirAll(filepath.Join(root, "config"), 0755)
-	os.WriteFile(filepath.Join(root, "config", "master.key"), []byte("key123"), 0644)
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("SECRET=123"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".env.local"), []byte("LOCAL=yes"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "config"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "config", "master.key"), []byte("key123"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create .worktreeinclude
-	os.WriteFile(filepath.Join(root, ".worktreeinclude"), []byte(".env*\nconfig/master.key\n"), 0644)
+	if err := os.WriteFile(filepath.Join(root, ".worktreeinclude"), []byte(".env*\nconfig/master.key\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := Sync(root, worktree); err != nil {
 		t.Fatal(err)
@@ -100,9 +120,15 @@ func TestSyncSkipsIdentical(t *testing.T) {
 	root := t.TempDir()
 	worktree := t.TempDir()
 
-	os.WriteFile(filepath.Join(root, ".env"), []byte("SECRET=123"), 0644)
-	os.WriteFile(filepath.Join(worktree, ".env"), []byte("SECRET=123"), 0644)
-	os.WriteFile(filepath.Join(root, ".worktreeinclude"), []byte(".env\n"), 0644)
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("SECRET=123"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, ".env"), []byte("SECRET=123"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".worktreeinclude"), []byte(".env\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Get mod time before sync
 	info, _ := os.Stat(filepath.Join(worktree, ".env"))
@@ -133,9 +159,15 @@ func TestSyncCreatesDirectories(t *testing.T) {
 	root := t.TempDir()
 	worktree := t.TempDir()
 
-	os.MkdirAll(filepath.Join(root, "config", "credentials"), 0755)
-	os.WriteFile(filepath.Join(root, "config", "credentials", "dev.key"), []byte("key"), 0644)
-	os.WriteFile(filepath.Join(root, ".worktreeinclude"), []byte("config/credentials/*.key\n"), 0644)
+	if err := os.MkdirAll(filepath.Join(root, "config", "credentials"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "config", "credentials", "dev.key"), []byte("key"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".worktreeinclude"), []byte("config/credentials/*.key\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := Sync(root, worktree); err != nil {
 		t.Fatal(err)

@@ -118,7 +118,7 @@ func TestWrap(t *testing.T) {
 func TestUnwrap(t *testing.T) {
 	inner := fmt.Errorf("inner error")
 	e := Wrap("code", 1, inner)
-	if e.Unwrap() != inner {
+	if !errors.Is(e, inner) {
 		t.Error("Unwrap() did not return the inner error")
 	}
 }

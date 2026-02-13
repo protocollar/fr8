@@ -90,7 +90,11 @@ func TestMcpResolveRepoFromCWD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(origDir)
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
@@ -115,7 +119,11 @@ func TestMcpResolveRepoNotGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(origDir)
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)

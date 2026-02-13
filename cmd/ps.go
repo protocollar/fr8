@@ -44,10 +44,10 @@ func runPS(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "REPO\tWORKSPACE\tSESSION")
+	_, _ = fmt.Fprintln(w, "REPO\tWORKSPACE\tSESSION")
 	for _, s := range sessions {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", s.Repo, s.Workspace, s.Name)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", s.Repo, s.Workspace, s.Name)
 	}
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }

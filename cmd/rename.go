@@ -61,7 +61,7 @@ func runRename(cmd *cobra.Command, args []string) error {
 		oldSession := tmux.SessionName(repoName, oldName)
 		if tmux.IsRunning(oldSession) {
 			newSession := tmux.SessionName(repoName, newName)
-			tmux.RenameSession(oldSession, newSession)
+			_ = tmux.RenameSession(oldSession, newSession)
 		}
 	}
 

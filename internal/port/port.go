@@ -34,6 +34,6 @@ func IsFree(port int) bool {
 	if err != nil {
 		return true // connection refused = port is free
 	}
-	conn.Close()
+	_ = conn.Close()
 	return false
 }

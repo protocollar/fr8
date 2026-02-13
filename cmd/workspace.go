@@ -12,6 +12,6 @@ var workspaceCmd = &cobra.Command{
 
 func init() {
 	workspaceCmd.PersistentFlags().StringVar(&resolveRepo, "repo", "", "target a specific registered repo")
-	workspaceCmd.RegisterFlagCompletionFunc("repo", repoNameCompletion)
+	_ = workspaceCmd.RegisterFlagCompletionFunc("repo", repoNameCompletion)
 	rootCmd.AddCommand(workspaceCmd)
 }

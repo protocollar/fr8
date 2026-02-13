@@ -96,11 +96,11 @@ func runRepoList(cmd *cobra.Command, args []string) error {
 
 	if !repoListWorkspaces {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tPATH")
+		_, _ = fmt.Fprintln(w, "NAME\tPATH")
 		for _, repo := range reg.Repos {
-			fmt.Fprintf(w, "%s\t%s\n", repo.Name, repo.Path)
+			_, _ = fmt.Fprintf(w, "%s\t%s\n", repo.Name, repo.Path)
 		}
-		w.Flush()
+		_ = w.Flush()
 		return nil
 	}
 
@@ -127,9 +127,9 @@ func runRepoList(cmd *cobra.Command, args []string) error {
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		for _, ws := range st.Workspaces {
-			fmt.Fprintf(w, "  %s\t%s\t%d\n", ws.Name, ws.Branch, ws.Port)
+			_, _ = fmt.Fprintf(w, "  %s\t%s\t%d\n", ws.Name, ws.Branch, ws.Port)
 		}
-		w.Flush()
+		_ = w.Flush()
 	}
 
 	return nil

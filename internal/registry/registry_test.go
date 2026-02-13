@@ -95,8 +95,12 @@ func TestAddDuplicatePath(t *testing.T) {
 
 func TestRemove(t *testing.T) {
 	r := &Registry{}
-	r.Add(Repo{Name: "myapp", Path: "/home/user/myapp"})
-	r.Add(Repo{Name: "other", Path: "/home/user/other"})
+	if err := r.Add(Repo{Name: "myapp", Path: "/home/user/myapp"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Add(Repo{Name: "other", Path: "/home/user/other"}); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := r.Remove("myapp"); err != nil {
 		t.Fatalf("Remove: %v", err)
@@ -116,7 +120,9 @@ func TestRemove(t *testing.T) {
 
 func TestFindByPath(t *testing.T) {
 	r := &Registry{}
-	r.Add(Repo{Name: "myapp", Path: "/home/user/myapp"})
+	if err := r.Add(Repo{Name: "myapp", Path: "/home/user/myapp"}); err != nil {
+		t.Fatal(err)
+	}
 
 	found := r.FindByPath("/home/user/myapp")
 	if found == nil {
@@ -133,8 +139,12 @@ func TestFindByPath(t *testing.T) {
 
 func TestNames(t *testing.T) {
 	r := &Registry{}
-	r.Add(Repo{Name: "alpha", Path: "/alpha"})
-	r.Add(Repo{Name: "beta", Path: "/beta"})
+	if err := r.Add(Repo{Name: "alpha", Path: "/alpha"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Add(Repo{Name: "beta", Path: "/beta"}); err != nil {
+		t.Fatal(err)
+	}
 
 	names := r.Names()
 	if len(names) != 2 {

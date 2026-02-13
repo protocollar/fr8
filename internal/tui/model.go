@@ -944,7 +944,7 @@ func batchArchiveCmd(names []string, rootPath, commonDir string) tea.Cmd {
 			// Stop tmux session
 			if tmux.Available() == nil {
 				sessionName := tmux.SessionName(repoName, ws.Name)
-				tmux.Stop(sessionName)
+				_ = tmux.Stop(sessionName)
 			}
 
 			// Run archive script
@@ -973,7 +973,7 @@ func batchArchiveCmd(names []string, rootPath, commonDir string) tea.Cmd {
 
 		// Batch state update
 		for _, name := range archived {
-			st.Remove(name)
+			_ = st.Remove(name)
 		}
 		if err := st.Save(commonDir); err != nil {
 			return batchArchiveResultMsg{err: fmt.Errorf("saving state: %w", err)}
@@ -989,7 +989,7 @@ func archiveWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd
 		if tmux.Available() == nil {
 			repoName := tmux.RepoName(rootPath)
 			sessionName := tmux.SessionName(repoName, ws.Name)
-			tmux.Stop(sessionName) // best-effort, ignore errors
+			_ = tmux.Stop(sessionName) // best-effort, ignore errors
 		}
 
 		cfg, err := config.Load(rootPath)
@@ -1025,7 +1025,7 @@ func archiveWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd
 		if err != nil {
 			return archiveResultMsg{name: ws.Name, err: fmt.Errorf("loading state: %w", err)}
 		}
-		st.Remove(ws.Name)
+		_ = st.Remove(ws.Name)
 		if err := st.Save(commonDir); err != nil {
 			return archiveResultMsg{name: ws.Name, err: fmt.Errorf("saving state: %w", err)}
 		}

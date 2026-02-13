@@ -91,15 +91,15 @@ func runOpenerList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCOMMAND\tDEFAULT")
+	_, _ = fmt.Fprintln(w, "NAME\tCOMMAND\tDEFAULT")
 	for _, o := range openers {
 		def := ""
 		if o.Default {
 			def = "(default)"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", o.Name, o.Command, def)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", o.Name, o.Command, def)
 	}
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }
 

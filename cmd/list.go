@@ -109,7 +109,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Save reconciled state
-	st.Save(commonDir)
+	_ = st.Save(commonDir)
 
 	if jsonout.Enabled {
 		if items == nil {
@@ -124,15 +124,15 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tBRANCH\tPORT\tRUNNING\tPATH")
+	_, _ = fmt.Fprintln(w, "NAME\tBRANCH\tPORT\tRUNNING\tPATH")
 	for _, item := range items {
 		runMark := ""
 		if item.Running {
 			runMark = "●"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", item.Name, item.Branch, item.Port, runMark, item.Path)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", item.Name, item.Branch, item.Port, runMark, item.Path)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	return nil
 }
@@ -228,15 +228,15 @@ func runListAll() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "REPO\tNAME\tBRANCH\tPORT\tRUNNING\tPATH")
+	_, _ = fmt.Fprintln(w, "REPO\tNAME\tBRANCH\tPORT\tRUNNING\tPATH")
 	for _, item := range items {
 		runMark := ""
 		if item.Running {
 			runMark = "●"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", item.Repo, item.Name, item.Branch, item.Port, runMark, item.Path)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", item.Repo, item.Name, item.Branch, item.Port, runMark, item.Path)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	return nil
 }

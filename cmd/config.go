@@ -163,11 +163,12 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if len(configErrors) == 0 && len(warnings) == 0 {
+	switch {
+	case len(configErrors) == 0 && len(warnings) == 0:
 		fmt.Println("Configuration is valid.")
-	} else if len(configErrors) == 0 {
+	case len(configErrors) == 0:
 		fmt.Println("\nConfiguration is valid with warnings.")
-	} else {
+	default:
 		return fmt.Errorf("configuration has %d error(s); fix the issues above in fr8.json", len(configErrors))
 	}
 

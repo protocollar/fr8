@@ -12,7 +12,7 @@ var wsOpenOpener string
 
 func init() {
 	wsOpenCmd.Flags().StringVar(&wsOpenOpener, "opener", "", "opener to use (see: fr8 opener list)")
-	wsOpenCmd.RegisterFlagCompletionFunc("opener", openerNameCompletion)
+	_ = wsOpenCmd.RegisterFlagCompletionFunc("opener", openerNameCompletion)
 	workspaceCmd.AddCommand(wsOpenCmd)
 }
 

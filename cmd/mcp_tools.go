@@ -444,7 +444,7 @@ func handleWorkspaceArchive(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	if tmux.Available() == nil {
 		sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
 		if tmux.IsRunning(sessionName) {
-			tmux.Stop(sessionName)
+			_ = tmux.Stop(sessionName)
 		}
 	}
 
@@ -452,14 +452,14 @@ func handleWorkspaceArchive(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	defaultBranch, _ := git.DefaultBranch(rootPath)
 	if cfg.Scripts.Archive != "" {
 		envVars := env.Build(ws, rootPath, defaultBranch)
-		runScript(cfg.Scripts.Archive, ws.Path, envVars)
+		_ = runScript(cfg.Scripts.Archive, ws.Path, envVars)
 	}
 
 	// Remove worktree
-	git.WorktreeRemove(rootPath, ws.Path)
+	_ = git.WorktreeRemove(rootPath, ws.Path)
 
 	// Update state
-	st.Remove(ws.Name)
+	_ = st.Remove(ws.Name)
 	if err := st.Save(commonDir); err != nil {
 		return mcpError(fmt.Sprintf("saving state: %v", err))
 	}
@@ -660,7 +660,7 @@ func handleWorkspaceRename(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		oldSession := tmux.SessionName(repoName, oldName)
 		if tmux.IsRunning(oldSession) {
 			newSession := tmux.SessionName(repoName, newName)
-			tmux.RenameSession(oldSession, newSession)
+			_ = tmux.RenameSession(oldSession, newSession)
 		}
 	}
 

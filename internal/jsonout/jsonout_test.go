@@ -49,7 +49,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	defer func() { os.Stdout = origStdout }()
 
 	fn()
-	w.Close()
+	_ = w.Close()
 
 	out, err := io.ReadAll(r)
 	if err != nil {
@@ -70,7 +70,7 @@ func captureStderr(t *testing.T, fn func()) string {
 	defer func() { os.Stderr = origStderr }()
 
 	fn()
-	w.Close()
+	_ = w.Close()
 
 	out, err := io.ReadAll(r)
 	if err != nil {
