@@ -39,30 +39,31 @@ fr8 ws archive my-feature
 
 All workspace commands live under `fr8 ws` (alias `fr8 workspace`).
 
-| Command                                             | Description                                            |
-|-----------------------------------------------------|--------------------------------------------------------|
-| `fr8 ws new [name] [-b branch] [-r branch] [-p PR]` | Create a workspace and drop into a shell               |
-| `fr8 ws list [--running] [--dirty] [--merged]`      | List all workspaces (with optional filters)            |
-| `fr8 ws rename <old> <new>`                         | Rename a workspace                                     |
-| `fr8 ws status [name]`                              | Show workspace details and environment variables       |
-| `fr8 ws env [name]`                                 | Print FR8_* env vars as `export` statements            |
-| `fr8 ws open [name] [--opener name]`                | Open workspace with a configured opener                |
-| `fr8 ws run [name] [-A/--all]`                      | Run the dev server in a background tmux session        |
-| `fr8 ws stop [name] [-A/--all]`                     | Stop a workspace's background tmux session             |
-| `fr8 ws attach [name]`                              | Attach to a running background session                 |
-| `fr8 ws logs [name] [-n lines] [-f]`                | Show recent output from a background session           |
-| `fr8 ws ps`                                         | List all running fr8 workspace sessions                |
-| `fr8 ws exec [name] -- <cmd>`                       | Run a command with workspace environment               |
-| `fr8 ws shell [name]`                               | Open a subshell with workspace environment             |
-| `fr8 ws cd [name]`                                  | Print workspace path                                   |
-| `fr8 ws browser [name]`                             | Open workspace dev server in the browser               |
-| `fr8 ws archive [name] [--force]`                   | Tear down workspace (archive script + remove worktree) |
-| `fr8 dashboard`                                     | Interactive TUI for browsing repos and workspaces      |
-| `fr8 config show\|validate`                         | View and validate configuration                        |
-| `fr8 repo add\|list\|remove`                        | Manage the global repo registry                        |
-| `fr8 opener add\|list\|remove\|set-default`         | Manage workspace openers (e.g. VSCode, Cursor)         |
-| `fr8 completion [bash\|zsh\|fish]`                  | Generate shell completions                             |
-| `fr8 mcp serve`                                     | Start MCP server on stdio (for AI agent integration)   |
+| Command                                                       | Description                                            |
+|---------------------------------------------------------------|--------------------------------------------------------|
+| `fr8 ws new [name] [-b branch] [-r branch] [-p PR]`           | Create a workspace and drop into a shell               |
+| `fr8 ws list [--running] [--dirty] [--merged]`                | List all workspaces (with optional filters)            |
+| `fr8 ws rename <old> <new>`                                   | Rename a workspace                                     |
+| `fr8 ws status [name]`                                        | Show workspace details and environment variables       |
+| `fr8 ws env [name]`                                           | Print FR8_* env vars as `export` statements            |
+| `fr8 ws open [name] [--opener name]`                          | Open workspace with a configured opener                |
+| `fr8 ws run [name] [-A/--all]`                                | Run the dev server in a background tmux session        |
+| `fr8 ws stop [name] [-A/--all]`                               | Stop a workspace's background tmux session             |
+| `fr8 ws attach [name]`                                        | Attach to a running background session                 |
+| `fr8 ws logs [name] [-n lines] [-f]`                          | Show recent output from a background session           |
+| `fr8 ws ps`                                                   | List all running fr8 workspace sessions                |
+| `fr8 ws exec [name] -- <cmd>`                                 | Run a command with workspace environment               |
+| `fr8 ws shell [name]`                                         | Open a subshell with workspace environment             |
+| `fr8 ws cd [name]`                                            | Print workspace path                                   |
+| `fr8 ws browser [name]`                                       | Open workspace dev server in the browser               |
+| `fr8 ws archive [name] [--force]`                             | Tear down workspace (archive script + remove worktree) |
+| `fr8 dashboard`                                               | Interactive TUI for browsing repos and workspaces      |
+| `fr8 config show\|validate`                                   | View and validate configuration                        |
+| `fr8 repo add\|list\|remove`                                  | Manage the global repo registry                        |
+| `fr8 opener add\|list\|remove\|set-default`                   | Manage workspace openers (e.g. VSCode, Cursor)         |
+| `fr8 completion [bash\|zsh\|fish]`                            | Generate shell completions                             |
+| `fr8 mcp serve`                                               | Start MCP server on stdio (for AI agent integration)   |
+| `fr8 skill install [--claude\|--codex] [--global\|--project]` | Install agent skill for CLI-based AI integration       |
 
 All `fr8 ws` subcommands accept a `--repo <name>` flag to target a specific registered repo, which is useful when workspace names overlap across repos.
 
@@ -339,6 +340,28 @@ The MCP server exposes 12 tools:
 | `config_validate`    | Validate fr8 configuration and report errors/warnings          |
 
 All tools accept an optional `repo` parameter to target a specific registered repo. The MCP server uses the global registry for workspace resolution (it does not auto-detect from CWD since it runs as a long-lived process).
+
+## Agent Skills (CLI Integration)
+
+fr8 can also be used by AI agents through direct CLI invocation instead of MCP. The `fr8 skill install` command generates a SKILL.md file that teaches agents how to manage workspaces using `fr8` commands with `--json` output.
+
+Use CLI mode (skills) when your agent supports [Agent Skills](https://agentskills.io), or MCP mode when it supports the Model Context Protocol. Both expose the same operations.
+
+### Install
+
+```bash
+# Claude Code (default — installs to ~/.claude/skills/fr8/)
+fr8 skill install
+
+# OpenAI Codex (installs to ~/.agents/skills/fr8/)
+fr8 skill install --codex
+
+# Project-scoped instead of global
+fr8 skill install --claude --project
+fr8 skill install --codex --project
+```
+
+Use `--name <name>` to customize the skill directory name (default: `fr8`), and `--force` to overwrite an existing installation. Run `fr8 skill --help` for the full explanation of CLI mode vs MCP.
 
 ## Example: Rails Project
 

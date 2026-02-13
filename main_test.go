@@ -38,3 +38,26 @@ func TestMCPSubcommandRegistered(t *testing.T) {
 		t.Error("root command missing 'mcp' subcommand")
 	}
 }
+
+func TestSkillSubcommandRegistered(t *testing.T) {
+	root := cmd.RootCommand()
+	found := false
+	for _, c := range root.Commands() {
+		if c.Use == "skill" {
+			found = true
+			// Verify install is a subcommand of skill
+			hasInstall := false
+			for _, sub := range c.Commands() {
+				if sub.Use == "install" {
+					hasInstall = true
+				}
+			}
+			if !hasInstall {
+				t.Error("skill command missing 'install' subcommand")
+			}
+		}
+	}
+	if !found {
+		t.Error("root command missing 'skill' subcommand")
+	}
+}
