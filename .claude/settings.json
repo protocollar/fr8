@@ -31,12 +31,41 @@
       "mcp__claude-in-chrome__*",
       "mcp__playwright__*"
     ],
-    "deny": [],
+    "deny": [
+      "Edit(go.mod)",
+      "Edit(go.sum)",
+      "Write(go.mod)",
+      "Write(go.sum)"
+    ],
     "ask": [],
     "additionalDirectories": [],
     "defaultMode": "default"
   },
-  "hooks": {},
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/support/hooks/check-race-flag.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/support/hooks/check-staged-changes.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
   "env": {},
   "attribution": {
     "commit": "",
