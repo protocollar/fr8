@@ -45,6 +45,15 @@ func WorktreeAdd(dir, path, branch string, newBranch bool, startPoint string) er
 	return nil
 }
 
+// WorktreeMove moves a worktree to a new path.
+func WorktreeMove(dir, oldPath, newPath string) error {
+	_, err := run(dir, "worktree", "move", oldPath, newPath)
+	if err != nil {
+		return fmt.Errorf("git worktree move: %w", err)
+	}
+	return nil
+}
+
 // WorktreeRemove removes the worktree at path.
 func WorktreeRemove(dir, path string) error {
 	_, err := run(dir, "worktree", "remove", path, "--force")
@@ -180,6 +189,16 @@ func TrackingBranch(dir, branch string) (string, error) {
 		return "", fmt.Errorf("no tracking branch for %s: %w", branch, err)
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// CreateTrackingBranch creates a local branch that tracks a remote branch.
+// Runs: git branch --track <branch> <remoteBranch>
+func CreateTrackingBranch(dir, branch, remoteBranch string) error {
+	_, err := run(dir, "branch", "--track", branch, remoteBranch)
+	if err != nil {
+		return fmt.Errorf("git branch --track %s %s: %w", branch, remoteBranch, err)
+	}
+	return nil
 }
 
 func run(dir string, args ...string) (string, error) {

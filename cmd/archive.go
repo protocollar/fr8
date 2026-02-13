@@ -20,9 +20,12 @@ func init() {
 }
 
 var archiveCmd = &cobra.Command{
-	Use:               "archive [name]",
-	Short:             "Tear down a workspace",
-	Long:              "Runs the archive script, removes the git worktree, and frees the port allocation.",
+	Use:   "archive [name]",
+	Short: "Tear down a workspace",
+	Long:  "Runs the archive script, removes the git worktree, and frees the port allocation.",
+	Example: `  fr8 ws archive
+  fr8 ws archive my-feature
+  fr8 ws archive --force`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: workspaceNameCompletion,
 	RunE:              runArchive,

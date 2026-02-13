@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,14 +20,18 @@ import (
 )
 
 var newBranch string
+var newRemote string
+var newPR string
 var noSetup bool
-var newRepo string
+var noShell bool
 
 func init() {
 	newCmd.Flags().StringVarP(&newBranch, "branch", "b", "", "branch name (creates new branch if it doesn't exist)")
+	newCmd.Flags().StringVarP(&newRemote, "remote", "r", "", "track an existing remote branch (fetches and creates local tracking branch)")
+	newCmd.Flags().StringVarP(&newPR, "pull-request", "p", "", "create workspace from a GitHub pull request number (requires gh CLI)")
 	newCmd.Flags().BoolVar(&noSetup, "no-setup", false, "skip running the setup script")
-	newCmd.Flags().StringVar(&newRepo, "repo", "", "create workspace in a registered repo (by name)")
-	newCmd.RegisterFlagCompletionFunc("repo", repoNameCompletion)
+	newCmd.Flags().BoolVar(&noShell, "no-shell", false, "skip dropping into a workspace shell after creation")
+	newCmd.MarkFlagsMutuallyExclusive("branch", "remote", "pull-request")
 	workspaceCmd.AddCommand(newCmd)
 }
 
@@ -34,14 +39,20 @@ var newCmd = &cobra.Command{
 	Use:   "new [name]",
 	Short: "Create a new workspace",
 	Long:  "Creates a git worktree, allocates a port range, syncs files, and runs the setup script.",
-	Args:  cobra.MaximumNArgs(1),
-	RunE:  runNew,
+	Example: `  fr8 ws new my-feature
+  fr8 ws new my-feature -b feature/auth
+  fr8 ws new -r feature/existing-branch
+  fr8 ws new -p 42
+  fr8 ws new --no-shell
+  fr8 ws new --repo myapp my-feature`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runNew,
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
 	var rootPath, commonDir string
 
-	if newRepo != "" {
+	if resolveRepo != "" {
 		// Resolve from registry
 		regPath, err := registry.DefaultPath()
 		if err != nil {
@@ -51,9 +62,9 @@ func runNew(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("loading registry: %w", err)
 		}
-		repo := reg.Find(newRepo)
+		repo := reg.Find(resolveRepo)
 		if repo == nil {
-			return fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", newRepo)
+			return fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", resolveRepo)
 		}
 		rootPath = repo.Path
 		commonDir, err = git.CommonDir(rootPath)
@@ -81,22 +92,75 @@ func runNew(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Determine branch and whether to track remote
+	branch := newBranch
+	trackRemote := false
+
+	if newPR != "" {
+		resolved, err := resolvePRBranch(rootPath, newPR)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("PR #%s → branch %s\n", newPR, resolved)
+		branch = resolved
+		trackRemote = true
+	} else if newRemote != "" {
+		branch = newRemote
+		trackRemote = true
+	}
+
+	ws, err := createWorkspace(rootPath, commonDir, nameFromArgs(args), branch, trackRemote, !noSetup, !noShell)
+	if err != nil {
+		return err
+	}
+	_ = ws
+	return nil
+}
+
+func nameFromArgs(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return ""
+}
+
+// resolvePRBranch uses the gh CLI to resolve a PR number to its head branch name.
+func resolvePRBranch(dir, prNumber string) (string, error) {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return "", fmt.Errorf("gh CLI is required for --pr (install from https://cli.github.com)")
+	}
+
+	c := exec.Command("gh", "pr", "view", prNumber, "--json", "headRefName", "-q", ".headRefName")
+	c.Dir = dir
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("resolving PR #%s: %s", prNumber, strings.TrimSpace(string(out)))
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" {
+		return "", fmt.Errorf("PR #%s: could not resolve branch name", prNumber)
+	}
+	return branch, nil
+}
+
+// createWorkspace is the shared workspace creation logic used by both the CLI
+// (runNew) and the TUI dashboard loop. When trackRemote is true, the branch is
+// expected to exist on origin and a local tracking branch will be created.
+func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, runSetup, enterShell bool) (*state.Workspace, error) {
 	cfg, err := config.Load(rootPath)
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
 	st, err := state.Load(commonDir)
 	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
+		return nil, fmt.Errorf("loading state: %w", err)
 	}
 
 	// Workspace name
-	var wsName string
-	if len(args) > 0 {
-		wsName = args[0]
+	if wsName != "" {
 		if st.Find(wsName) != nil {
-			return fmt.Errorf("workspace %q already exists", wsName)
+			return nil, fmt.Errorf("workspace %q already exists", wsName)
 		}
 	} else {
 		wsName = names.Generate(st.Names())
@@ -118,13 +182,27 @@ func runNew(cmd *cobra.Command, args []string) error {
 		startPoint = remoteRef
 	}
 
-	// Branch
-	branch := newBranch
+	// Branch resolution
 	createBranch := false
 	if branch == "" {
 		branch = wsName
 		createBranch = true
+	} else if trackRemote {
+		// --remote or --pr: create local tracking branch from origin/<branch>
+		remoteBranch := "origin/" + branch
+		if !git.RemoteRefExists(rootPath, remoteBranch) {
+			return nil, fmt.Errorf("remote branch %s not found (did you forget to push?)", remoteBranch)
+		}
+		if !git.BranchExists(rootPath, branch) {
+			fmt.Printf("Creating local branch %s tracking %s\n", branch, remoteBranch)
+			if err := git.CreateTrackingBranch(rootPath, branch, remoteBranch); err != nil {
+				return nil, fmt.Errorf("creating tracking branch: %w", err)
+			}
+		}
+		startPoint = ""
+		createBranch = false
 	} else {
+		// -b: create new local branch if it doesn't exist
 		if !git.BranchExists(rootPath, branch) {
 			createBranch = true
 		}
@@ -135,7 +213,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 	localPorts := st.AllocatedPorts()
 	allocatedPort, err := port.Allocate(mergePorts(globalPorts, localPorts), cfg.BasePort, cfg.PortRange)
 	if err != nil {
-		return fmt.Errorf("allocating port: %w", err)
+		return nil, fmt.Errorf("allocating port: %w", err)
 	}
 
 	// Worktree path
@@ -145,11 +223,11 @@ func runNew(cmd *cobra.Command, args []string) error {
 	// Create worktree
 	fmt.Printf("Creating workspace %q...\n", wsName)
 	if err := os.MkdirAll(wtBase, 0755); err != nil {
-		return fmt.Errorf("creating worktree directory: %w", err)
+		return nil, fmt.Errorf("creating worktree directory: %w", err)
 	}
 
 	if err := git.WorktreeAdd(rootPath, wsPath, branch, createBranch, startPoint); err != nil {
-		return fmt.Errorf("creating worktree: %w", err)
+		return nil, fmt.Errorf("creating worktree: %w", err)
 	}
 
 	ws := state.Workspace{
@@ -163,11 +241,11 @@ func runNew(cmd *cobra.Command, args []string) error {
 	if err := st.Add(ws); err != nil {
 		// Clean up worktree on state failure
 		git.WorktreeRemove(rootPath, wsPath)
-		return fmt.Errorf("saving workspace: %w", err)
+		return nil, fmt.Errorf("saving workspace: %w", err)
 	}
 	if err := st.Save(commonDir); err != nil {
 		git.WorktreeRemove(rootPath, wsPath)
-		return fmt.Errorf("saving state: %w", err)
+		return nil, fmt.Errorf("saving state: %w", err)
 	}
 
 	// Auto-register repo in global registry
@@ -180,7 +258,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run setup script
-	if !noSetup && cfg.Scripts.Setup != "" {
+	if runSetup && cfg.Scripts.Setup != "" {
 		fmt.Printf("Running setup script: %s\n", cfg.Scripts.Setup)
 		envVars := env.Build(&ws, rootPath, defaultBranch)
 		if err := runScript(cfg.Scripts.Setup, wsPath, envVars); err != nil {
@@ -195,10 +273,40 @@ func runNew(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Workspace created:\n")
 	fmt.Printf("  Name:   %s\n", ws.Name)
 	fmt.Printf("  Branch: %s\n", ws.Branch)
-	fmt.Printf("  Port:   %d\n", ws.Port)
-	fmt.Printf("  Path:   %s\n", ws.Path)
+	fmt.Printf("  Ports:  %d-%d (%d ports)\n", ws.Port, ws.Port+cfg.PortRange-1, cfg.PortRange)
+	fmt.Printf("  Path:   %s\n", shortenHomePath(ws.Path))
 
-	return nil
+	// Drop into a subshell in the new workspace
+	if enterShell {
+		fmt.Println()
+		fmt.Printf("Entering workspace %q...\n", ws.Name)
+		fmt.Println("Type 'exit' to leave the workspace shell.")
+		fmt.Println()
+
+		envVars := env.Build(&ws, rootPath, defaultBranch)
+
+		userShell := os.Getenv("SHELL")
+		if userShell == "" {
+			userShell = "/bin/bash"
+		}
+
+		c := exec.Command(userShell)
+		c.Dir = ws.Path
+		c.Env = envVars
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		c.Stdin = os.Stdin
+
+		if err := c.Run(); err != nil {
+			if _, ok := err.(*exec.ExitError); !ok {
+				return &ws, err
+			}
+		}
+
+		fmt.Printf("\nLeft workspace %q.\n", ws.Name)
+	}
+
+	return &ws, nil
 }
 
 // allAllocatedPorts collects every allocated port across all repos in the
@@ -242,6 +350,17 @@ func mergePorts(a, b []int) []int {
 		}
 	}
 	return merged
+}
+
+func shortenHomePath(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	if strings.HasPrefix(p, home) {
+		return "~" + p[len(home):]
+	}
+	return p
 }
 
 func runScript(script, dir string, environ []string) error {

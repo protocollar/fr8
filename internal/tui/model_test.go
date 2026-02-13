@@ -3,7 +3,9 @@ package tui
 import (
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/thomascarr/fr8/internal/opener"
 	"github.com/thomascarr/fr8/internal/registry"
 	"github.com/thomascarr/fr8/internal/state"
 )
@@ -704,6 +706,462 @@ func TestRepoRunAllNoOpOnEmptyList(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Error("should not dispatch cmd on empty repo list")
+	}
+}
+
+func TestOpenKeyDispatchesLoadOpeners(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.cursor = 1
+
+	result, cmd := m.Update(keyRune('o'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after o")
+	}
+	if m.openerWsIdx != 1 {
+		t.Errorf("openerWsIdx = %d, want 1", m.openerWsIdx)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after o")
+	}
+}
+
+func TestOpenKeyNoOpOnEmptyWorkspaces(t *testing.T) {
+	m := model{view: viewWorkspaceList, workspaces: nil}
+
+	result, cmd := m.Update(keyRune('o'))
+	m = result.(model)
+
+	if m.loading {
+		t.Error("should not set loading on empty workspace list")
+	}
+	if cmd != nil {
+		t.Error("should not dispatch cmd on empty workspace list")
+	}
+}
+
+func TestOpenersLoadedSingleOpenerQuitsDirectly(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.openerWsIdx = 1
+
+	result, cmd := m.Update(openersLoadedMsg{
+		openers: []opener.Opener{{Name: "vscode", Command: "code"}},
+	})
+	m = result.(model)
+
+	if m.openRequest == nil {
+		t.Fatal("expected openRequest to be set for single opener")
+	}
+	if m.openRequest.workspace.Name != "ws-two" {
+		t.Errorf("openRequest.workspace.Name = %q, want ws-two", m.openRequest.workspace.Name)
+	}
+	if m.openRequest.openerName != "vscode" {
+		t.Errorf("openRequest.openerName = %q, want vscode", m.openRequest.openerName)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestOpenersLoadedMultipleShowsPicker(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.openerWsIdx = 0
+
+	m = updateModel(m, openersLoadedMsg{
+		openers: []opener.Opener{
+			{Name: "vscode", Command: "code"},
+			{Name: "cursor", Command: "cursor"},
+		},
+	})
+
+	if m.loading {
+		t.Error("expected loading=false")
+	}
+	if m.view != viewOpenerPicker {
+		t.Errorf("view = %d, want viewOpenerPicker", m.view)
+	}
+	if len(m.openers) != 2 {
+		t.Errorf("openers count = %d, want 2", len(m.openers))
+	}
+	if m.openerCursor != 0 {
+		t.Errorf("openerCursor = %d, want 0", m.openerCursor)
+	}
+}
+
+func TestOpenersLoadedEmptyShowsError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, openersLoadedMsg{openers: nil})
+
+	if m.loading {
+		t.Error("expected loading=false")
+	}
+	if m.err == nil {
+		t.Error("expected error for empty openers")
+	}
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList", m.view)
+	}
+}
+
+func TestOpenersLoadedWithError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, openersLoadedMsg{err: errStub{}})
+
+	if m.loading {
+		t.Error("expected loading=false")
+	}
+	if m.err == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+func TestOpenerPickerNavigation(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewOpenerPicker
+	m.openerWsIdx = 0
+	m.openers = []opener.Opener{
+		{Name: "vscode", Command: "code"},
+		{Name: "cursor", Command: "cursor"},
+		{Name: "terminal", Command: "open"},
+	}
+	m.openerCursor = 0
+
+	// Down
+	m = updateModel(m, keyRune('j'))
+	if m.openerCursor != 1 {
+		t.Errorf("after j: openerCursor = %d, want 1", m.openerCursor)
+	}
+
+	m = updateModel(m, keyRune('j'))
+	if m.openerCursor != 2 {
+		t.Errorf("after j j: openerCursor = %d, want 2", m.openerCursor)
+	}
+
+	// Clamp at bottom
+	m = updateModel(m, keyRune('j'))
+	if m.openerCursor != 2 {
+		t.Errorf("after j at bottom: openerCursor = %d, want 2", m.openerCursor)
+	}
+
+	// Up
+	m = updateModel(m, keyRune('k'))
+	if m.openerCursor != 1 {
+		t.Errorf("after k: openerCursor = %d, want 1", m.openerCursor)
+	}
+}
+
+func TestOpenerPickerSelectQuitsWithRequest(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewOpenerPicker
+	m.openerWsIdx = 1
+	m.openers = []opener.Opener{
+		{Name: "vscode", Command: "code"},
+		{Name: "cursor", Command: "cursor"},
+	}
+	m.openerCursor = 1
+
+	result, cmd := m.Update(keyEnter())
+	m = result.(model)
+
+	if m.openRequest == nil {
+		t.Fatal("expected openRequest to be set")
+	}
+	if m.openRequest.workspace.Name != "ws-two" {
+		t.Errorf("workspace = %q, want ws-two", m.openRequest.workspace.Name)
+	}
+	if m.openRequest.openerName != "cursor" {
+		t.Errorf("openerName = %q, want cursor", m.openRequest.openerName)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestOpenerPickerEscGoesBack(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewOpenerPicker
+	m.openerWsIdx = 0
+	m.openers = []opener.Opener{
+		{Name: "vscode", Command: "code"},
+	}
+
+	m = updateModel(m, keyEsc())
+
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after Esc", m.view)
+	}
+}
+
+// --- Batch Archive Tests ---
+
+func TestBatchArchiveFiltersToMergedClean(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[0].Merged = true // ws-one: merged + clean
+	m.workspaces[1].Merged = true
+	m.workspaces[1].Dirty = true // ws-two: merged + dirty (excluded)
+	// ws-three: not merged (excluded)
+
+	m = updateModel(m, keyRune('A'))
+
+	if m.view != viewConfirmBatchArchive {
+		t.Errorf("view = %d, want viewConfirmBatchArchive", m.view)
+	}
+	if len(m.batchArchiveNames) != 1 {
+		t.Errorf("batchArchiveNames = %v, want [ws-one]", m.batchArchiveNames)
+	}
+	if m.batchArchiveNames[0] != "ws-one" {
+		t.Errorf("batchArchiveNames[0] = %q, want ws-one", m.batchArchiveNames[0])
+	}
+}
+
+func TestBatchArchiveNoMergedShowsError(t *testing.T) {
+	m := seedWorkspaceModel()
+	// No workspaces are merged
+
+	m = updateModel(m, keyRune('A'))
+
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList", m.view)
+	}
+	if m.err == nil {
+		t.Error("expected error when no merged workspaces")
+	}
+}
+
+func TestBatchArchiveConfirmDispatches(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewConfirmBatchArchive
+	m.batchArchiveNames = []string{"ws-one", "ws-two"}
+
+	result, cmd := m.Update(keyRune('y'))
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after confirming batch archive")
+	}
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after confirm", m.view)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd for batch archive operation")
+	}
+}
+
+func TestBatchArchiveCancelReturns(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewConfirmBatchArchive
+	m.batchArchiveNames = []string{"ws-one"}
+
+	m = updateModel(m, keyRune('n'))
+
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after cancel", m.view)
+	}
+	if m.batchArchiveNames != nil {
+		t.Errorf("batchArchiveNames should be nil after cancel, got %v", m.batchArchiveNames)
+	}
+}
+
+func TestBatchArchiveResultRemovesWorkspaces(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.repos = []repoItem{
+		{Repo: registry.Repo{Name: "alpha", Path: "/a"}, WorkspaceCount: 3},
+	}
+	m.repoName = "alpha"
+
+	m = updateModel(m, batchArchiveResultMsg{archived: []string{"ws-one", "ws-three"}})
+
+	if m.loading {
+		t.Error("expected loading=false after batchArchiveResultMsg")
+	}
+	if len(m.workspaces) != 1 {
+		t.Errorf("workspaces count = %d, want 1", len(m.workspaces))
+	}
+	if m.workspaces[0].Workspace.Name != "ws-two" {
+		t.Errorf("remaining workspace = %q, want ws-two", m.workspaces[0].Workspace.Name)
+	}
+	if m.repos[0].WorkspaceCount != 1 {
+		t.Errorf("repo workspace count = %d, want 1", m.repos[0].WorkspaceCount)
+	}
+}
+
+// --- Create Workspace Tests ---
+
+func TestNewKeyOpensCreateView(t *testing.T) {
+	m := seedWorkspaceModel()
+
+	m = updateModel(m, keyRune('n'))
+
+	if m.view != viewCreateWorkspace {
+		t.Errorf("view = %d, want viewCreateWorkspace", m.view)
+	}
+}
+
+func TestCreateWorkspaceEnterQuitsWithRequest(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewCreateWorkspace
+	m.createInput = textinput.New()
+	m.createInput.SetValue("my-ws")
+
+	result, cmd := m.Update(keyEnter())
+	m = result.(model)
+
+	if m.createRequest == nil {
+		t.Fatal("expected createRequest to be set")
+	}
+	if m.createRequest.name != "my-ws" {
+		t.Errorf("createRequest.name = %q, want my-ws", m.createRequest.name)
+	}
+	if m.createRequest.rootPath != "/a" {
+		t.Errorf("createRequest.rootPath = %q, want /a", m.createRequest.rootPath)
+	}
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestCreateWorkspaceEscReturns(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.view = viewCreateWorkspace
+	m.createInput = textinput.New()
+
+	m = updateModel(m, keyEsc())
+
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after Esc", m.view)
+	}
+}
+
+// --- Help Overlay Tests ---
+
+func TestHelpToggleFromRepoList(t *testing.T) {
+	m := seedRepoModel()
+
+	// Press ? to open help
+	m = updateModel(m, keyRune('?'))
+	if m.view != viewHelp {
+		t.Errorf("view = %d, want viewHelp", m.view)
+	}
+	if m.previousView != viewRepoList {
+		t.Errorf("previousView = %d, want viewRepoList", m.previousView)
+	}
+
+	// Press ? again to close help
+	m = updateModel(m, keyRune('?'))
+	if m.view != viewRepoList {
+		t.Errorf("view = %d, want viewRepoList after closing help", m.view)
+	}
+}
+
+func TestHelpToggleFromWorkspaceList(t *testing.T) {
+	m := seedWorkspaceModel()
+
+	m = updateModel(m, keyRune('?'))
+	if m.view != viewHelp {
+		t.Errorf("view = %d, want viewHelp", m.view)
+	}
+	if m.previousView != viewWorkspaceList {
+		t.Errorf("previousView = %d, want viewWorkspaceList", m.previousView)
+	}
+
+	// Any non-? key returns to previous view
+	m = updateModel(m, keyRune('j'))
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after pressing j in help", m.view)
+	}
+}
+
+func TestOpenersLoadedDefaultOpenerAutoSelect(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.openerWsIdx = 1
+
+	result, cmd := m.Update(openersLoadedMsg{
+		openers: []opener.Opener{
+			{Name: "vscode", Command: "code"},
+			{Name: "cursor", Command: "cursor", Default: true},
+			{Name: "terminal", Command: "open"},
+		},
+	})
+	m = result.(model)
+
+	// Should auto-select the default opener (cursor) without showing picker
+	if m.openRequest == nil {
+		t.Fatal("expected openRequest to be set for default opener")
+	}
+	if m.openRequest.workspace.Name != "ws-two" {
+		t.Errorf("openRequest.workspace.Name = %q, want ws-two", m.openRequest.workspace.Name)
+	}
+	if m.openRequest.openerName != "cursor" {
+		t.Errorf("openRequest.openerName = %q, want cursor", m.openRequest.openerName)
+	}
+	if m.view == viewOpenerPicker {
+		t.Error("should NOT show picker when a default opener exists")
+	}
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestOpenersLoadedNoDefaultShowsPicker(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.openerWsIdx = 0
+
+	// Multiple openers, none is default — should show picker
+	m = updateModel(m, openersLoadedMsg{
+		openers: []opener.Opener{
+			{Name: "vscode", Command: "code"},
+			{Name: "cursor", Command: "cursor"},
+			{Name: "terminal", Command: "open"},
+		},
+	})
+
+	if m.view != viewOpenerPicker {
+		t.Errorf("view = %d, want viewOpenerPicker when no default", m.view)
+	}
+	if len(m.openers) != 3 {
+		t.Errorf("openers count = %d, want 3", len(m.openers))
+	}
+}
+
+func TestHelpEscReturnsToPreview(t *testing.T) {
+	m := seedRepoModel()
+
+	// Open help
+	m = updateModel(m, keyRune('?'))
+	if m.view != viewHelp {
+		t.Fatalf("view = %d, want viewHelp", m.view)
+	}
+
+	// Esc should also return to previous view
+	m = updateModel(m, keyEsc())
+	if m.view != viewRepoList {
+		t.Errorf("view = %d, want viewRepoList after Esc from help", m.view)
 	}
 }
 

@@ -8,13 +8,17 @@ type keyMap struct {
 	Enter          key.Binding
 	Back           key.Binding
 	Archive        key.Binding
+	BatchArchive   key.Binding
 	Shell          key.Binding
+	Open           key.Binding
+	New            key.Binding
 	Run            key.Binding
 	Browser        key.Binding
 	Stop           key.Binding
 	Attach         key.Binding
 	RunAllGlobal   key.Binding
 	StopAllGlobal  key.Binding
+	Help           key.Binding
 	Quit           key.Binding
 	Yes            key.Binding
 	No             key.Binding
@@ -41,9 +45,21 @@ var keys = keyMap{
 		key.WithKeys("a"),
 		key.WithHelp("a", "archive"),
 	),
+	BatchArchive: key.NewBinding(
+		key.WithKeys("A"),
+		key.WithHelp("A", "archive merged"),
+	),
 	Shell: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "shell"),
+	),
+	Open: key.NewBinding(
+		key.WithKeys("o"),
+		key.WithHelp("o", "open"),
+	),
+	New: key.NewBinding(
+		key.WithKeys("n"),
+		key.WithHelp("n", "new"),
 	),
 	Run: key.NewBinding(
 		key.WithKeys("r"),
@@ -68,6 +84,10 @@ var keys = keyMap{
 	StopAllGlobal: key.NewBinding(
 		key.WithKeys("X"),
 		key.WithHelp("X", "global stop"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "help"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),

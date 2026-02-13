@@ -15,9 +15,15 @@ import (
 )
 
 var listAll bool
+var listRunning bool
+var listDirty bool
+var listMerged bool
 
 func init() {
 	listCmd.Flags().BoolVarP(&listAll, "all", "a", false, "list workspaces across all registered repos")
+	listCmd.Flags().BoolVar(&listRunning, "running", false, "only show running workspaces")
+	listCmd.Flags().BoolVar(&listDirty, "dirty", false, "only show workspaces with uncommitted changes")
+	listCmd.Flags().BoolVar(&listMerged, "merged", false, "only show workspaces whose branch is merged")
 	workspaceCmd.AddCommand(listCmd)
 }
 
@@ -25,8 +31,13 @@ var listCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List all workspaces",
-	Args:    cobra.NoArgs,
-	RunE:    runList,
+	Example: `  fr8 ws list
+  fr8 ws list --all
+  fr8 ws list --running
+  fr8 ws list --dirty
+  fr8 ws list --merged`,
+	Args: cobra.NoArgs,
+	RunE: runList,
 }
 
 func runList(cmd *cobra.Command, args []string) error {
@@ -62,18 +73,41 @@ func runList(cmd *cobra.Command, args []string) error {
 	hasTmux := tmux.Available() == nil
 	rootPath, _ := git.RootWorktreePath(cwd)
 	repoName := filepath.Base(rootPath)
+	defaultBranch, _ := git.DefaultBranch(rootPath)
+	hasFilters := listRunning || listDirty || listMerged
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tBRANCH\tPORT\tRUNNING\tPATH")
 	for _, ws := range st.Workspaces {
-		running := ""
+		running := false
 		if hasTmux {
 			sessionName := tmux.SessionName(repoName, ws.Name)
-			if tmux.IsRunning(sessionName) {
-				running = "●"
+			running = tmux.IsRunning(sessionName)
+		}
+
+		if hasFilters {
+			if listRunning && !running {
+				continue
+			}
+			if listDirty {
+				dirty, _ := git.HasUncommittedChanges(ws.Path)
+				if !dirty {
+					continue
+				}
+			}
+			if listMerged && defaultBranch != "" {
+				merged, _ := git.IsMerged(ws.Path, ws.Branch, defaultBranch)
+				if !merged {
+					continue
+				}
 			}
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", ws.Name, ws.Branch, ws.Port, running, ws.Path)
+
+		runMark := ""
+		if running {
+			runMark = "●"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", ws.Name, ws.Branch, ws.Port, runMark, ws.Path)
 	}
 	w.Flush()
 
@@ -100,6 +134,7 @@ func runListAll() error {
 	}
 
 	hasTmux := tmux.Available() == nil
+	hasFilters := listRunning || listDirty || listMerged
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "REPO\tNAME\tBRANCH\tPORT\tRUNNING\tPATH")
@@ -117,15 +152,39 @@ func runListAll() error {
 			continue
 		}
 
+		rootPath, _ := git.RootWorktreePath(repo.Path)
+		defaultBranch, _ := git.DefaultBranch(rootPath)
+
 		for _, ws := range st.Workspaces {
-			running := ""
+			running := false
 			if hasTmux {
 				sessionName := tmux.SessionName(repo.Name, ws.Name)
-				if tmux.IsRunning(sessionName) {
-					running = "●"
+				running = tmux.IsRunning(sessionName)
+			}
+
+			if hasFilters {
+				if listRunning && !running {
+					continue
+				}
+				if listDirty {
+					dirty, _ := git.HasUncommittedChanges(ws.Path)
+					if !dirty {
+						continue
+					}
+				}
+				if listMerged && defaultBranch != "" {
+					merged, _ := git.IsMerged(ws.Path, ws.Branch, defaultBranch)
+					if !merged {
+						continue
+					}
 				}
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", repo.Name, ws.Name, ws.Branch, ws.Port, running, ws.Path)
+
+			runMark := ""
+			if running {
+				runMark = "●"
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", repo.Name, ws.Name, ws.Branch, ws.Port, runMark, ws.Path)
 		}
 	}
 
@@ -148,8 +207,6 @@ func reconcile(st *state.State, cwd string) {
 	for _, ws := range st.Workspaces {
 		if wtPaths[ws.Path] {
 			remaining = append(remaining, ws)
-		} else {
-			fmt.Fprintf(os.Stderr, "Removed stale workspace %q (worktree no longer exists)\n", ws.Name)
 		}
 	}
 	st.Workspaces = remaining

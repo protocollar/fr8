@@ -129,6 +129,7 @@ func renderRepoList(m model) string {
 		{"x", "stop all"},
 		{"R", "global run"},
 		{"X", "global stop"},
+		{"?", "help"},
 		{"q", "quit"},
 	}, w))
 	b.WriteString("\n")

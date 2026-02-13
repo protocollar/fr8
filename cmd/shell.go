@@ -15,8 +15,10 @@ func init() {
 }
 
 var shellCmd = &cobra.Command{
-	Use:               "shell [name]",
-	Short:             "Open a subshell with workspace environment",
+	Use:   "shell [name]",
+	Short: "Open a subshell with workspace environment",
+	Example: `  fr8 ws shell
+  fr8 ws shell my-feature`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: workspaceNameCompletion,
 	RunE:              runShell,

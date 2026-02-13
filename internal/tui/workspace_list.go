@@ -93,6 +93,20 @@ func renderWorkspaceList(m model) string {
 				helpKeyStyle.Render("n") + " " + helpDescStyle.Render("no"),
 		)
 		b.WriteString(renderTitledPanel("Confirm", detail.String(), w))
+	} else if m.view == viewConfirmBatchArchive && len(m.batchArchiveNames) > 0 {
+		var detail strings.Builder
+		detail.WriteString(confirmStyle.Render(fmt.Sprintf("Archive %d merged+clean workspaces?", len(m.batchArchiveNames))))
+		detail.WriteString("\n\n")
+		for _, name := range m.batchArchiveNames {
+			detail.WriteString("  " + dimStyle.Render("- "+name) + "\n")
+		}
+		detail.WriteString("\n")
+		detail.WriteString(
+			helpKeyStyle.Render("y") + " " + helpDescStyle.Render("yes") +
+				"  " +
+				helpKeyStyle.Render("n") + " " + helpDescStyle.Render("no"),
+		)
+		b.WriteString(renderTitledPanel("Confirm Batch Archive", detail.String(), w))
 	} else if m.cursor < len(m.workspaces) {
 		item := m.workspaces[m.cursor]
 		var detail strings.Builder
@@ -115,12 +129,16 @@ func renderWorkspaceList(m model) string {
 
 	// Help bar
 	b.WriteString(renderHelpBar([]helpItem{
+		{"n", "new"},
 		{"r", "run"},
 		{"x", "stop"},
 		{"t", "attach"},
 		{"s", "shell"},
+		{"o", "open"},
 		{"b", "browser"},
 		{"a", "archive"},
+		{"A", "archive merged"},
+		{"?", "help"},
 		{"esc", "back"},
 		{"q", "quit"},
 	}, w))

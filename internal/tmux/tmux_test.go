@@ -384,6 +384,52 @@ func TestAttachPassesEnvironment(t *testing.T) {
 	}
 }
 
+func TestRenameSession(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	oldName := "fr8/test-repo/test-rename-old"
+	newName := "fr8/test-repo/test-rename-new"
+
+	// Ensure clean state
+	Stop(oldName)
+	Stop(newName)
+
+	// Start a session with the old name
+	if err := Start(oldName, "/tmp", "sleep 60", nil); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer Stop(oldName)
+	defer Stop(newName)
+
+	// Rename it
+	if err := RenameSession(oldName, newName); err != nil {
+		t.Fatalf("RenameSession failed: %v", err)
+	}
+
+	// Old name should no longer be running
+	if IsRunning(oldName) {
+		t.Error("old session name should not be running after rename")
+	}
+
+	// New name should be running
+	if !IsRunning(newName) {
+		t.Error("new session name should be running after rename")
+	}
+}
+
+func TestRenameSessionNotRunning(t *testing.T) {
+	if !tmuxInstalled() {
+		t.Skip("tmux not installed")
+	}
+
+	err := RenameSession("fr8/nonexistent/no-such-session", "fr8/nonexistent/new-name")
+	if err == nil {
+		t.Error("expected error when renaming nonexistent session")
+	}
+}
+
 func TestAttachNotRunning(t *testing.T) {
 	if !tmuxInstalled() {
 		t.Skip("tmux not installed")

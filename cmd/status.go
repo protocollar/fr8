@@ -13,8 +13,10 @@ func init() {
 }
 
 var statusCmd = &cobra.Command{
-	Use:               "status [name]",
-	Short:             "Show workspace details",
+	Use:   "status [name]",
+	Short: "Show workspace details",
+	Example: `  fr8 ws status
+  fr8 ws status my-feature`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: workspaceNameCompletion,
 	RunE:              runStatus,

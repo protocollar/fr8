@@ -3,6 +3,7 @@ module github.com/thomascarr/fr8
 go 1.25.5
 
 require (
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
 	github.com/charmbracelet/bubbles v1.0.0 // indirect

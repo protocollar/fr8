@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/thomascarr/fr8/internal/git"
 	"github.com/thomascarr/fr8/internal/state"
@@ -10,8 +11,21 @@ import (
 )
 
 // resolveWorkspace tries CWD-based resolution, falling back to global registry lookup.
+// If --repo is set, resolves directly from that registered repo.
 // Returns (workspace, rootPath, commonDir, error).
 func resolveWorkspace(name string) (*state.Workspace, string, string, error) {
+	// If --repo is specified, bypass CWD and resolve from that repo
+	if resolveRepo != "" {
+		if name == "" {
+			return nil, "", "", fmt.Errorf("workspace name is required when using --repo")
+		}
+		ws, rootPath, commonDir, err := workspace.ResolveFromRepo(name, resolveRepo)
+		if err != nil {
+			return nil, "", "", err
+		}
+		return ws, rootPath, commonDir, nil
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, "", "", err
@@ -43,5 +57,11 @@ func resolveWorkspace(name string) (*state.Workspace, string, string, error) {
 		return nil, "", "", fmt.Errorf("not inside a git repository (specify a workspace name or run from inside a repo)")
 	}
 
-	return workspace.ResolveGlobal(name)
+	ws, rootPath, commonDir, err := workspace.ResolveGlobal(name)
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	fmt.Fprintf(os.Stderr, "(resolved from repo %q)\n", filepath.Base(rootPath))
+	return ws, rootPath, commonDir, nil
 }
