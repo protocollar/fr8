@@ -3,6 +3,7 @@ package workspace
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/thomascarr/fr8/internal/git"
 	"github.com/thomascarr/fr8/internal/registry"
@@ -33,8 +34,16 @@ func Resolve(name string, st *state.State) (*state.Workspace, error) {
 	return ws, nil
 }
 
+// globalMatch holds a workspace match found during global resolution.
+type globalMatch struct {
+	Workspace *state.Workspace
+	RootPath  string
+	CommonDir string
+	RepoName  string
+}
+
 // ResolveGlobal searches all registered repos for a workspace by name.
-// Returns the workspace, the repo root path, and the git common dir.
+// Returns an error listing the matching repos if more than one is found.
 func ResolveGlobal(name string) (*state.Workspace, string, string, error) {
 	regPath, err := registry.DefaultPath()
 	if err != nil {
@@ -45,6 +54,8 @@ func ResolveGlobal(name string) (*state.Workspace, string, string, error) {
 	if err != nil {
 		return nil, "", "", fmt.Errorf("loading registry: %w", err)
 	}
+
+	var matches []globalMatch
 
 	for _, repo := range reg.Repos {
 		commonDir, err := git.CommonDir(repo.Path)
@@ -63,9 +74,69 @@ func ResolveGlobal(name string) (*state.Workspace, string, string, error) {
 			if err != nil {
 				rootPath = repo.Path
 			}
-			return ws, rootPath, commonDir, nil
+			matches = append(matches, globalMatch{
+				Workspace: ws,
+				RootPath:  rootPath,
+				CommonDir: commonDir,
+				RepoName:  repo.Name,
+			})
 		}
 	}
 
-	return nil, "", "", fmt.Errorf("workspace %q not found in any registered repo", name)
+	switch len(matches) {
+	case 0:
+		return nil, "", "", fmt.Errorf("workspace %q not found in any registered repo", name)
+	case 1:
+		m := matches[0]
+		return m.Workspace, m.RootPath, m.CommonDir, nil
+	default:
+		var repoNames []string
+		for _, m := range matches {
+			repoNames = append(repoNames, m.RepoName)
+		}
+		return nil, "", "", fmt.Errorf(
+			"workspace %q found in multiple repos: %s\nUse --repo to disambiguate: fr8 ws <cmd> --repo <reponame> %s",
+			name, strings.Join(repoNames, ", "), name,
+		)
+	}
+}
+
+// ResolveFromRepo resolves a workspace by name from a specific registered repo.
+func ResolveFromRepo(name, repoName string) (*state.Workspace, string, string, error) {
+	regPath, err := registry.DefaultPath()
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	reg, err := registry.Load(regPath)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("loading registry: %w", err)
+	}
+
+	repo := reg.Find(repoName)
+	if repo == nil {
+		return nil, "", "", fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", repoName)
+	}
+
+	commonDir, err := git.CommonDir(repo.Path)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("reading git data for %s: %w", repoName, err)
+	}
+
+	st, err := state.Load(commonDir)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("loading state for %s: %w", repoName, err)
+	}
+
+	ws := st.Find(name)
+	if ws == nil {
+		return nil, "", "", fmt.Errorf("workspace %q not found in repo %q", name, repoName)
+	}
+
+	rootPath, err := git.RootWorktreePath(repo.Path)
+	if err != nil {
+		rootPath = repo.Path
+	}
+
+	return ws, rootPath, commonDir, nil
 }

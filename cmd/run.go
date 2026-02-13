@@ -21,8 +21,11 @@ func init() {
 }
 
 var runCmd = &cobra.Command{
-	Use:               "run [name]",
-	Short:             "Run the dev server in a background tmux session",
+	Use:   "run [name]",
+	Short: "Run the dev server in a background tmux session",
+	Example: `  fr8 ws run
+  fr8 ws run my-feature
+  fr8 ws run --all`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: workspaceNameCompletion,
 	RunE:              runRun,

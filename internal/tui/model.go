@@ -23,6 +23,7 @@ import (
 
 type model struct {
 	view              viewState
+	previousView      viewState
 	repos             []repoItem
 	workspaces        []workspaceItem
 	cursor            int
@@ -247,6 +248,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		}
+		// Check for default opener
+		if d := opener.FindDefault(msg.openers); d != nil {
+			ws := m.workspaces[m.openerWsIdx]
+			m.openRequest = &openRequestMsg{
+				workspace:  ws.Workspace,
+				openerName: d.Name,
+			}
+			return m, tea.Quit
+		}
 		// Multiple openers — show picker
 		m.openerCursor = 0
 		m.view = viewOpenerPicker
@@ -265,7 +275,22 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Toggle help overlay from any view (except text input views)
+	if key.Matches(msg, keys.Help) && m.view != viewCreateWorkspace {
+		if m.view == viewHelp {
+			m.view = m.previousView
+		} else {
+			m.previousView = m.view
+			m.view = viewHelp
+		}
+		return m, nil
+	}
+
 	switch m.view {
+	case viewHelp:
+		// Any key (besides ? and q handled above) goes back
+		m.view = m.previousView
+		return m, nil
 	case viewConfirmArchive:
 		return m.handleConfirmKey(msg)
 	case viewConfirmBatchArchive:
@@ -521,6 +546,8 @@ func (m model) View() string {
 		s = renderOpenerPicker(m)
 	case viewCreateWorkspace:
 		s = renderCreateWorkspace(m)
+	case viewHelp:
+		s = renderHelp(m)
 	}
 	return padToHeight(s, m.height)
 }

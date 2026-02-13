@@ -15,6 +15,7 @@ const (
 	viewConfirmBatchArchive
 	viewOpenerPicker
 	viewCreateWorkspace
+	viewHelp
 )
 
 // repoItem is a repo with preloaded workspace count.

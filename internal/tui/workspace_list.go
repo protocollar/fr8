@@ -138,6 +138,7 @@ func renderWorkspaceList(m model) string {
 		{"b", "browser"},
 		{"a", "archive"},
 		{"A", "archive merged"},
+		{"?", "help"},
 		{"esc", "back"},
 		{"q", "quit"},
 	}, w))

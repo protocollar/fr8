@@ -147,6 +147,63 @@ func TestWorktreeAddRemoveIntegration(t *testing.T) {
 	}
 }
 
+func TestWorktreeMoveIntegration(t *testing.T) {
+	dir := initTestRepo(t)
+	oldPath := filepath.Join(t.TempDir(), "old-ws")
+	newPath := filepath.Join(t.TempDir(), "new-ws")
+
+	// Add a worktree
+	if err := WorktreeAdd(dir, oldPath, "feature", true, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// Move it
+	if err := WorktreeMove(dir, oldPath, newPath); err != nil {
+		t.Fatal(err)
+	}
+
+	// Old path should no longer exist
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("expected old path to not exist after move")
+	}
+
+	// New path should exist
+	if _, err := os.Stat(newPath); err != nil {
+		t.Errorf("expected new path to exist after move: %v", err)
+	}
+
+	// Git should list the worktree at the new path
+	wts, err := WorktreeList(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, wt := range wts {
+		real, _ := filepath.EvalSymlinks(wt.Path)
+		want, _ := filepath.EvalSymlinks(newPath)
+		if real == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("worktree list does not contain new path %q", newPath)
+	}
+
+	// Cleanup
+	if err := WorktreeRemove(dir, newPath); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorktreeMoveNonexistentIntegration(t *testing.T) {
+	dir := initTestRepo(t)
+
+	err := WorktreeMove(dir, "/nonexistent/worktree", "/tmp/new-path")
+	if err == nil {
+		t.Error("expected error when moving nonexistent worktree")
+	}
+}
+
 func TestCommonDirIntegration(t *testing.T) {
 	dir := initTestRepo(t)
 

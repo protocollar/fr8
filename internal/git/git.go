@@ -45,6 +45,15 @@ func WorktreeAdd(dir, path, branch string, newBranch bool, startPoint string) er
 	return nil
 }
 
+// WorktreeMove moves a worktree to a new path.
+func WorktreeMove(dir, oldPath, newPath string) error {
+	_, err := run(dir, "worktree", "move", oldPath, newPath)
+	if err != nil {
+		return fmt.Errorf("git worktree move: %w", err)
+	}
+	return nil
+}
+
 // WorktreeRemove removes the worktree at path.
 func WorktreeRemove(dir, path string) error {
 	_, err := run(dir, "worktree", "remove", path, "--force")

@@ -16,8 +16,11 @@ func init() {
 }
 
 var wsOpenCmd = &cobra.Command{
-	Use:               "open [name]",
-	Short:             "Open a workspace with a configured opener",
+	Use:   "open [name]",
+	Short: "Open a workspace with a configured opener",
+	Example: `  fr8 ws open
+  fr8 ws open my-feature
+  fr8 ws open --opener vscode`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: workspaceNameCompletion,
 	RunE:              runWsOpen,
@@ -56,12 +59,14 @@ func runWsOpen(cmd *cobra.Command, args []string) error {
 		}
 	} else if len(openers) == 1 {
 		o = &openers[0]
+	} else if d := opener.FindDefault(openers); d != nil {
+		o = d
 	} else {
 		fmt.Println("Multiple openers configured:")
 		for _, op := range openers {
 			fmt.Printf("  - %s\n", op.Name)
 		}
-		return fmt.Errorf("specify one with --opener <name>")
+		return fmt.Errorf("specify one with --opener <name> (or set a default with: fr8 opener set-default <name>)")
 	}
 
 	if err := opener.Run(*o, ws.Path); err != nil {

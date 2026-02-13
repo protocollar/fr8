@@ -18,6 +18,7 @@ type keyMap struct {
 	Attach         key.Binding
 	RunAllGlobal   key.Binding
 	StopAllGlobal  key.Binding
+	Help           key.Binding
 	Quit           key.Binding
 	Yes            key.Binding
 	No             key.Binding
@@ -83,6 +84,10 @@ var keys = keyMap{
 	StopAllGlobal: key.NewBinding(
 		key.WithKeys("X"),
 		key.WithHelp("X", "global stop"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "help"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),

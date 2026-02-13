@@ -150,6 +150,54 @@ func TestNames(t *testing.T) {
 	}
 }
 
+func TestRename(t *testing.T) {
+	s := &State{}
+	s.Add(Workspace{Name: "alpha"})
+	s.Add(Workspace{Name: "beta"})
+
+	if err := s.Rename("alpha", "gamma"); err != nil {
+		t.Fatal(err)
+	}
+	if s.Find("alpha") != nil {
+		t.Error("expected alpha to be gone")
+	}
+	if s.Find("gamma") == nil {
+		t.Error("expected gamma to exist")
+	}
+	if s.Find("beta") == nil {
+		t.Error("expected beta to remain")
+	}
+}
+
+func TestRenameNotFound(t *testing.T) {
+	s := &State{}
+	err := s.Rename("nonexistent", "new")
+	if err == nil {
+		t.Fatal("expected error for nonexistent workspace")
+	}
+}
+
+func TestRenameAlreadyExists(t *testing.T) {
+	s := &State{}
+	s.Add(Workspace{Name: "alpha"})
+	s.Add(Workspace{Name: "beta"})
+
+	err := s.Rename("alpha", "beta")
+	if err == nil {
+		t.Fatal("expected error for duplicate name")
+	}
+}
+
+func TestRenameSameName(t *testing.T) {
+	s := &State{}
+	s.Add(Workspace{Name: "alpha"})
+
+	err := s.Rename("alpha", "alpha")
+	if err == nil {
+		t.Fatal("expected error for same name")
+	}
+}
+
 func TestSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 2, 11, 12, 0, 0, 0, time.UTC)

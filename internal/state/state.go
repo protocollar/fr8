@@ -129,6 +129,22 @@ func (s *State) Names() []string {
 	return names
 }
 
+// Rename changes a workspace's name. Returns an error if old doesn't exist or new already does.
+func (s *State) Rename(oldName, newName string) error {
+	if oldName == newName {
+		return fmt.Errorf("old and new names are the same")
+	}
+	if s.Find(newName) != nil {
+		return fmt.Errorf("workspace %q already exists", newName)
+	}
+	ws := s.Find(oldName)
+	if ws == nil {
+		return fmt.Errorf("workspace %q not found", oldName)
+	}
+	ws.Name = newName
+	return nil
+}
+
 func statePath(gitCommonDir string) string {
 	return filepath.Join(gitCommonDir, stateFile)
 }

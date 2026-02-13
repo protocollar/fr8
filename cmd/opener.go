@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -13,6 +15,7 @@ func init() {
 	openerCmd.AddCommand(openerListCmd)
 	openerCmd.AddCommand(openerAddCmd)
 	openerCmd.AddCommand(openerRemoveCmd)
+	openerCmd.AddCommand(openerSetDefaultCmd)
 	rootCmd.AddCommand(openerCmd)
 }
 
@@ -31,17 +34,27 @@ var openerListCmd = &cobra.Command{
 }
 
 var openerAddCmd = &cobra.Command{
-	Use:   "add <name> [executable]",
+	Use:   "add <name> [command...]",
 	Short: "Add a workspace opener",
 	Long: `Add a named opener. The executable must be in $PATH.
-If omitted, the name is used as the executable.
+If no command is given, the name is used as the executable.
+Commands can include arguments (e.g. "code --new-window").
 
 Examples:
   fr8 opener add rubymine
   fr8 opener add vscode code
+  fr8 opener add vscode-nw code --new-window
   fr8 opener add cursor`,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.MinimumNArgs(1),
 	RunE: runOpenerAdd,
+}
+
+var openerSetDefaultCmd = &cobra.Command{
+	Use:               "set-default <name>",
+	Short:             "Set the default opener",
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: openerNameCompletion,
+	RunE:              runOpenerSetDefault,
 }
 
 var openerRemoveCmd = &cobra.Command{
@@ -65,14 +78,18 @@ func runOpenerList(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(openers) == 0 {
-		fmt.Println("No openers configured. Add one with: fr8 opener add <name> [executable]")
+		fmt.Println("No openers configured. Add one with: fr8 opener add <name> [command...]")
 		return nil
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCOMMAND")
+	fmt.Fprintln(w, "NAME\tCOMMAND\tDEFAULT")
 	for _, o := range openers {
-		fmt.Fprintf(w, "%s\t%s\n", o.Name, o.Command)
+		def := ""
+		if o.Default {
+			def = "(default)"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", o.Name, o.Command, def)
 	}
 	w.Flush()
 	return nil
@@ -82,7 +99,7 @@ func runOpenerAdd(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	command := name
 	if len(args) > 1 {
-		command = args[1]
+		command = strings.Join(args[1:], " ")
 	}
 
 	path, err := opener.DefaultPath()
@@ -106,6 +123,38 @@ func runOpenerAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Added opener %q (%s)\n", name, command)
+
+	// Validate the executable exists in $PATH
+	parts := strings.Fields(command)
+	if _, err := exec.LookPath(parts[0]); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %q not found in $PATH\n", parts[0])
+	}
+
+	return nil
+}
+
+func runOpenerSetDefault(cmd *cobra.Command, args []string) error {
+	name := args[0]
+
+	path, err := opener.DefaultPath()
+	if err != nil {
+		return err
+	}
+
+	openers, err := opener.Load(path)
+	if err != nil {
+		return fmt.Errorf("loading openers: %w", err)
+	}
+
+	if err := opener.SetDefault(openers, name); err != nil {
+		return err
+	}
+
+	if err := opener.Save(path, openers); err != nil {
+		return fmt.Errorf("saving openers: %w", err)
+	}
+
+	fmt.Printf("Set %q as default opener.\n", name)
 	return nil
 }
 

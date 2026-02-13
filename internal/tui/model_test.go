@@ -1052,4 +1052,117 @@ func TestCreateWorkspaceEscReturns(t *testing.T) {
 	}
 }
 
+// --- Help Overlay Tests ---
+
+func TestHelpToggleFromRepoList(t *testing.T) {
+	m := seedRepoModel()
+
+	// Press ? to open help
+	m = updateModel(m, keyRune('?'))
+	if m.view != viewHelp {
+		t.Errorf("view = %d, want viewHelp", m.view)
+	}
+	if m.previousView != viewRepoList {
+		t.Errorf("previousView = %d, want viewRepoList", m.previousView)
+	}
+
+	// Press ? again to close help
+	m = updateModel(m, keyRune('?'))
+	if m.view != viewRepoList {
+		t.Errorf("view = %d, want viewRepoList after closing help", m.view)
+	}
+}
+
+func TestHelpToggleFromWorkspaceList(t *testing.T) {
+	m := seedWorkspaceModel()
+
+	m = updateModel(m, keyRune('?'))
+	if m.view != viewHelp {
+		t.Errorf("view = %d, want viewHelp", m.view)
+	}
+	if m.previousView != viewWorkspaceList {
+		t.Errorf("previousView = %d, want viewWorkspaceList", m.previousView)
+	}
+
+	// Any non-? key returns to previous view
+	m = updateModel(m, keyRune('j'))
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList after pressing j in help", m.view)
+	}
+}
+
+func TestOpenersLoadedDefaultOpenerAutoSelect(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.openerWsIdx = 1
+
+	result, cmd := m.Update(openersLoadedMsg{
+		openers: []opener.Opener{
+			{Name: "vscode", Command: "code"},
+			{Name: "cursor", Command: "cursor", Default: true},
+			{Name: "terminal", Command: "open"},
+		},
+	})
+	m = result.(model)
+
+	// Should auto-select the default opener (cursor) without showing picker
+	if m.openRequest == nil {
+		t.Fatal("expected openRequest to be set for default opener")
+	}
+	if m.openRequest.workspace.Name != "ws-two" {
+		t.Errorf("openRequest.workspace.Name = %q, want ws-two", m.openRequest.workspace.Name)
+	}
+	if m.openRequest.openerName != "cursor" {
+		t.Errorf("openRequest.openerName = %q, want cursor", m.openRequest.openerName)
+	}
+	if m.view == viewOpenerPicker {
+		t.Error("should NOT show picker when a default opener exists")
+	}
+	if cmd == nil {
+		t.Fatal("expected quit cmd")
+	}
+	quitMsg := cmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestOpenersLoadedNoDefaultShowsPicker(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.openerWsIdx = 0
+
+	// Multiple openers, none is default — should show picker
+	m = updateModel(m, openersLoadedMsg{
+		openers: []opener.Opener{
+			{Name: "vscode", Command: "code"},
+			{Name: "cursor", Command: "cursor"},
+			{Name: "terminal", Command: "open"},
+		},
+	})
+
+	if m.view != viewOpenerPicker {
+		t.Errorf("view = %d, want viewOpenerPicker when no default", m.view)
+	}
+	if len(m.openers) != 3 {
+		t.Errorf("openers count = %d, want 3", len(m.openers))
+	}
+}
+
+func TestHelpEscReturnsToPreview(t *testing.T) {
+	m := seedRepoModel()
+
+	// Open help
+	m = updateModel(m, keyRune('?'))
+	if m.view != viewHelp {
+		t.Fatalf("view = %d, want viewHelp", m.view)
+	}
+
+	// Esc should also return to previous view
+	m = updateModel(m, keyEsc())
+	if m.view != viewRepoList {
+		t.Errorf("view = %d, want viewRepoList after Esc from help", m.view)
+	}
+}
+
 // errStub is defined in view_test.go (same package)

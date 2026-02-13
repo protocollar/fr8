@@ -95,6 +95,61 @@ func TestFind(t *testing.T) {
 	}
 }
 
+func TestFindDefault(t *testing.T) {
+	openers := []Opener{
+		{Name: "vscode", Command: "code"},
+		{Name: "cursor", Command: "cursor", Default: true},
+	}
+
+	d := FindDefault(openers)
+	if d == nil {
+		t.Fatal("expected to find default")
+	}
+	if d.Name != "cursor" {
+		t.Errorf("default = %q, want cursor", d.Name)
+	}
+}
+
+func TestFindDefaultNone(t *testing.T) {
+	openers := []Opener{
+		{Name: "vscode", Command: "code"},
+		{Name: "cursor", Command: "cursor"},
+	}
+
+	if d := FindDefault(openers); d != nil {
+		t.Errorf("expected nil, got %+v", d)
+	}
+}
+
+func TestSetDefault(t *testing.T) {
+	openers := []Opener{
+		{Name: "vscode", Command: "code", Default: true},
+		{Name: "cursor", Command: "cursor"},
+	}
+
+	if err := SetDefault(openers, "cursor"); err != nil {
+		t.Fatal(err)
+	}
+
+	if openers[0].Default {
+		t.Error("vscode should not be default")
+	}
+	if !openers[1].Default {
+		t.Error("cursor should be default")
+	}
+}
+
+func TestSetDefaultNotFound(t *testing.T) {
+	openers := []Opener{
+		{Name: "vscode", Command: "code"},
+	}
+
+	err := SetDefault(openers, "missing")
+	if err == nil {
+		t.Fatal("expected error for missing opener")
+	}
+}
+
 func TestRunMissingExecutable(t *testing.T) {
 	o := Opener{Name: "fake", Command: "fr8_nonexistent_binary_xyz"}
 	err := Run(o, "/tmp")
@@ -103,6 +158,60 @@ func TestRunMissingExecutable(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "executable not found") {
 		t.Errorf("error = %q, want it to mention 'executable not found'", err.Error())
+	}
+}
+
+func TestSaveAndLoadPreservesDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "openers.json")
+
+	openers := []Opener{
+		{Name: "vscode", Command: "code"},
+		{Name: "cursor", Command: "cursor", Default: true},
+	}
+
+	if err := Save(path, openers); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if len(loaded) != 2 {
+		t.Fatalf("loaded %d openers, want 2", len(loaded))
+	}
+	if loaded[0].Default {
+		t.Error("vscode should not be default after roundtrip")
+	}
+	if !loaded[1].Default {
+		t.Error("cursor should be default after roundtrip")
+	}
+}
+
+func TestRunMultiWordCommand(t *testing.T) {
+	// Use "echo" which exists everywhere — the multi-word command should
+	// split correctly and pass extra args before the workspace path.
+	o := Opener{Name: "echo-test", Command: "echo --flag extra"}
+	err := Run(o, "/tmp/workspace")
+	if err != nil {
+		t.Fatalf("Run with multi-word command: %v", err)
+	}
+	// echo starts and exits immediately — no cleanup needed.
+	// The key assertion is that Run() didn't error, meaning it correctly
+	// split "echo --flag extra" into ["echo", "--flag", "extra"] and appended
+	// the workspace path.
+}
+
+func TestRunEmptyCommand(t *testing.T) {
+	o := Opener{Name: "empty", Command: ""}
+	err := Run(o, "/tmp")
+	if err == nil {
+		t.Fatal("expected error for empty command")
+	}
+	if !strings.Contains(err.Error(), "empty command") {
+		t.Errorf("error = %q, want it to mention 'empty command'", err.Error())
 	}
 }
 

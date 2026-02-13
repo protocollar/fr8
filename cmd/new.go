@@ -24,7 +24,6 @@ var newRemote string
 var newPR string
 var noSetup bool
 var noShell bool
-var newRepo string
 
 func init() {
 	newCmd.Flags().StringVarP(&newBranch, "branch", "b", "", "branch name (creates new branch if it doesn't exist)")
@@ -32,8 +31,6 @@ func init() {
 	newCmd.Flags().StringVarP(&newPR, "pull-request", "p", "", "create workspace from a GitHub pull request number (requires gh CLI)")
 	newCmd.Flags().BoolVar(&noSetup, "no-setup", false, "skip running the setup script")
 	newCmd.Flags().BoolVar(&noShell, "no-shell", false, "skip dropping into a workspace shell after creation")
-	newCmd.Flags().StringVar(&newRepo, "repo", "", "create workspace in a registered repo (by name)")
-	newCmd.RegisterFlagCompletionFunc("repo", repoNameCompletion)
 	newCmd.MarkFlagsMutuallyExclusive("branch", "remote", "pull-request")
 	workspaceCmd.AddCommand(newCmd)
 }
@@ -42,14 +39,20 @@ var newCmd = &cobra.Command{
 	Use:   "new [name]",
 	Short: "Create a new workspace",
 	Long:  "Creates a git worktree, allocates a port range, syncs files, and runs the setup script.",
-	Args:  cobra.MaximumNArgs(1),
-	RunE:  runNew,
+	Example: `  fr8 ws new my-feature
+  fr8 ws new my-feature -b feature/auth
+  fr8 ws new -r feature/existing-branch
+  fr8 ws new -p 42
+  fr8 ws new --no-shell
+  fr8 ws new --repo myapp my-feature`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runNew,
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
 	var rootPath, commonDir string
 
-	if newRepo != "" {
+	if resolveRepo != "" {
 		// Resolve from registry
 		regPath, err := registry.DefaultPath()
 		if err != nil {
@@ -59,9 +62,9 @@ func runNew(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("loading registry: %w", err)
 		}
-		repo := reg.Find(newRepo)
+		repo := reg.Find(resolveRepo)
 		if repo == nil {
-			return fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", newRepo)
+			return fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", resolveRepo)
 		}
 		rootPath = repo.Path
 		commonDir, err = git.CommonDir(rootPath)
@@ -270,8 +273,8 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 	fmt.Printf("Workspace created:\n")
 	fmt.Printf("  Name:   %s\n", ws.Name)
 	fmt.Printf("  Branch: %s\n", ws.Branch)
-	fmt.Printf("  Port:   %d\n", ws.Port)
-	fmt.Printf("  Path:   %s\n", ws.Path)
+	fmt.Printf("  Ports:  %d-%d (%d ports)\n", ws.Port, ws.Port+cfg.PortRange-1, cfg.PortRange)
+	fmt.Printf("  Path:   %s\n", shortenHomePath(ws.Path))
 
 	// Drop into a subshell in the new workspace
 	if enterShell {
@@ -347,6 +350,17 @@ func mergePorts(a, b []int) []int {
 		}
 	}
 	return merged
+}
+
+func shortenHomePath(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	if strings.HasPrefix(p, home) {
+		return "~" + p[len(home):]
+	}
+	return p
 }
 
 func runScript(script, dir string, environ []string) error {

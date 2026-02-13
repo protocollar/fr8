@@ -135,6 +135,16 @@ func CapturePanes(name string, lines int) (string, error) {
 	return string(out), nil
 }
 
+// RenameSession renames a tmux session. Returns an error if the rename fails.
+func RenameSession(oldName, newName string) error {
+	cmd := exec.Command("tmux", "rename-session", "-t", oldName, newName)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("renaming tmux session: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 // ListFr8Sessions returns all tmux sessions with the "fr8/" prefix.
 func ListFr8Sessions() ([]Session, error) {
 	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")

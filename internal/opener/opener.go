@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -13,6 +14,7 @@ import (
 type Opener struct {
 	Name    string `json:"name"`
 	Command string `json:"command"`
+	Default bool   `json:"default,omitempty"`
 }
 
 // DefaultPath returns the default openers config path (~/.config/fr8/openers.json).
@@ -78,14 +80,47 @@ func Find(openers []Opener, name string) *Opener {
 	return nil
 }
 
+// FindDefault returns the opener marked as default, or nil if none.
+func FindDefault(openers []Opener) *Opener {
+	for i := range openers {
+		if openers[i].Default {
+			return &openers[i]
+		}
+	}
+	return nil
+}
+
+// SetDefault marks the named opener as default and clears the flag on all others.
+func SetDefault(openers []Opener, name string) error {
+	found := false
+	for i := range openers {
+		if openers[i].Name == name {
+			openers[i].Default = true
+			found = true
+		} else {
+			openers[i].Default = false
+		}
+	}
+	if !found {
+		return fmt.Errorf("opener %q not found", name)
+	}
+	return nil
+}
+
 // Run resolves the opener's command to an executable and opens the workspace path.
+// The Command field may contain arguments (e.g. "code --new-window").
 // Returns an error if the executable is not found in $PATH.
 func Run(o Opener, workspacePath string) error {
-	binPath, err := exec.LookPath(o.Command)
-	if err != nil {
-		return fmt.Errorf("%s: executable not found in $PATH", o.Command)
+	parts := strings.Fields(o.Command)
+	if len(parts) == 0 {
+		return fmt.Errorf("opener %q has an empty command", o.Name)
 	}
-	cmd := exec.Command(binPath, workspacePath)
+	binPath, err := exec.LookPath(parts[0])
+	if err != nil {
+		return fmt.Errorf("%s: executable not found in $PATH", parts[0])
+	}
+	args := append(parts[1:], workspacePath)
+	cmd := exec.Command(binPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Start()

@@ -2,6 +2,8 @@ package cmd
 
 import "github.com/spf13/cobra"
 
+var resolveRepo string
+
 var workspaceCmd = &cobra.Command{
 	Use:     "workspace",
 	Aliases: []string{"ws"},
@@ -9,5 +11,7 @@ var workspaceCmd = &cobra.Command{
 }
 
 func init() {
+	workspaceCmd.PersistentFlags().StringVar(&resolveRepo, "repo", "", "target a specific registered repo")
+	workspaceCmd.RegisterFlagCompletionFunc("repo", repoNameCompletion)
 	rootCmd.AddCommand(workspaceCmd)
 }
