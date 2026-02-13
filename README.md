@@ -62,6 +62,7 @@ All workspace commands live under `fr8 ws` (alias `fr8 workspace`).
 | `fr8 repo add\|list\|remove`                        | Manage the global repo registry                        |
 | `fr8 opener add\|list\|remove\|set-default`         | Manage workspace openers (e.g. VSCode, Cursor)         |
 | `fr8 completion [bash\|zsh\|fish]`                  | Generate shell completions                             |
+| `fr8 mcp serve`                                     | Start MCP server on stdio (for AI agent integration)   |
 
 All `fr8 ws` subcommands accept a `--repo <name>` flag to target a specific registered repo, which is useful when workspace names overlap across repos.
 
@@ -226,6 +227,118 @@ fr8 completion zsh > "${fpath[1]}/_fr8"
 # Fish
 fr8 completion fish | source
 ```
+
+## JSON Output
+
+All commands support `--json` for structured machine-readable output. Add `--concise` for minimal fields (useful in pipelines).
+
+```bash
+# Structured workspace list
+fr8 ws list --json
+
+# Minimal output for scripting
+fr8 ws list --json --concise
+
+# Create a workspace without entering a shell
+fr8 ws new my-feature -b feature/auth --json
+
+# Check status as JSON
+fr8 ws status my-feature --json
+```
+
+When `--json` is active:
+- Stdout contains only the JSON result object (one per command)
+- Human progress messages (e.g. "Fetching latest from origin...") are suppressed
+- Errors are written to stderr as JSON: `{"error": "...", "code": "...", "exit_code": N}`
+- Interactive commands (`attach`, `shell`, `exec`, `dashboard`) return an error with code `interactive_only`
+- When stdout is not a TTY (even without `--json`), human messages are routed to stderr so piped stdout stays clean
+
+### Exit Codes
+
+| Code | Meaning            | Example                                        |
+|------|--------------------|------------------------------------------------|
+| 0    | Success            |                                                |
+| 1    | General error      | Config parse error, script failure             |
+| 2    | Not found          | Workspace, repo, or opener doesn't exist       |
+| 3    | Already exists     | Workspace or repo name collision               |
+| 4    | Not in repo        | Command run outside a git repository           |
+| 5    | Dirty workspace    | Uncommitted changes block archive              |
+| 6    | Interactive only   | `--json` used with attach/shell/exec/dashboard |
+| 7    | tmux not available | tmux required but not installed                |
+
+### Idempotency Flags
+
+These flags make commands safe to call repeatedly in scripts and automation:
+
+| Flag               | Command      | Behavior                                     |
+|--------------------|--------------|----------------------------------------------|
+| `--if-not-exists`  | `ws new`     | Succeed silently if workspace already exists |
+| `--if-exists`      | `ws archive` | Succeed silently if workspace not found      |
+| `--if-not-running` | `ws run`     | Succeed silently if already running          |
+| `--if-running`     | `ws stop`    | Succeed silently if not running              |
+| `--dry-run`        | `ws new`     | Show what would be created without doing it  |
+| `--dry-run`        | `ws archive` | Show what would be done without doing it     |
+
+## MCP Server (AI Agent Integration)
+
+fr8 includes a built-in [Model Context Protocol](https://modelcontextprotocol.io) server, allowing AI agents (Claude, Cursor, etc.) to manage workspaces programmatically.
+
+### Setup
+
+Run `fr8 mcp help` for setup instructions, or read on.
+
+Add fr8 to your MCP client configuration. For Claude Code, add it to `.mcp.json` or via the CLI:
+
+```bash
+claude mcp add fr8 -- fr8 mcp serve
+```
+
+Or manually in your MCP config file (e.g. `.mcp.json`, `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "fr8": {
+      "command": "fr8",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+For Cursor, add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "fr8": {
+      "command": "fr8",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+### Available Tools
+
+The MCP server exposes 12 tools:
+
+| Tool                 | Description                                                    |
+|----------------------|----------------------------------------------------------------|
+| `workspace_list`     | List workspaces (filter by repo, running, dirty, merged)       |
+| `workspace_status`   | Get workspace details, env vars, process status, dirty state   |
+| `workspace_create`   | Create a new workspace (branch, remote, PR, idempotent)        |
+| `workspace_archive`  | Archive a workspace (force, idempotent)                        |
+| `workspace_run`      | Start dev server in background tmux session                    |
+| `workspace_stop`     | Stop a workspace's background session                          |
+| `workspace_env`      | Get FR8_* environment variables for a workspace                |
+| `workspace_logs`     | Get recent output from a background session                    |
+| `workspace_rename`   | Rename a workspace                                             |
+| `repo_list`          | List registered repos (optionally include workspace details)   |
+| `config_show`        | Show resolved fr8 configuration for a repo                     |
+| `config_validate`    | Validate fr8 configuration and report errors/warnings          |
+
+All tools accept an optional `repo` parameter to target a specific registered repo. The MCP server uses the global registry for workspace resolution (it does not auto-detect from CWD since it runs as a long-lived process).
 
 ## Example: Rails Project
 

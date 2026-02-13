@@ -10,10 +10,10 @@ import (
 
 // Worktree represents a git worktree entry.
 type Worktree struct {
-	Path   string
-	HEAD   string
-	Branch string
-	Bare   bool
+	Path   string `json:"path"`
+	HEAD   string `json:"head"`
+	Branch string `json:"branch"`
+	Bare   bool   `json:"bare"`
 }
 
 // WorktreeList returns all worktrees for the repo at dir.

@@ -102,7 +102,7 @@ func SetDefault(openers []Opener, name string) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("opener %q not found", name)
+		return fmt.Errorf("opener %q not found (see available: fr8 opener list)", name)
 	}
 	return nil
 }
@@ -117,7 +117,7 @@ func Run(o Opener, workspacePath string) error {
 	}
 	binPath, err := exec.LookPath(parts[0])
 	if err != nil {
-		return fmt.Errorf("%s: executable not found in $PATH", parts[0])
+		return fmt.Errorf("%s: executable not found in $PATH (check that it is installed and on your PATH)", parts[0])
 	}
 	args := append(parts[1:], workspacePath)
 	cmd := exec.Command(binPath, args...)

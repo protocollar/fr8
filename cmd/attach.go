@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
+	"github.com/thomascarr/fr8/internal/exitcode"
+	"github.com/thomascarr/fr8/internal/jsonout"
 	"github.com/thomascarr/fr8/internal/tmux"
 )
 
@@ -19,6 +23,14 @@ var attachCmd = &cobra.Command{
 }
 
 func runAttach(cmd *cobra.Command, args []string) error {
+	if jsonout.Enabled {
+		return &exitcode.ExitError{
+			Err:      fmt.Errorf("attach requires an interactive terminal and cannot be used with --json"),
+			ExitCode: exitcode.InteractiveOnly,
+			Code:     "interactive_only",
+		}
+	}
+
 	if err := tmux.Available(); err != nil {
 		return err
 	}

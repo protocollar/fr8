@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"github.com/thomascarr/fr8/internal/jsonout"
 	"github.com/thomascarr/fr8/internal/tmux"
 )
 
@@ -28,6 +29,13 @@ func runPS(cmd *cobra.Command, args []string) error {
 	sessions, err := tmux.ListFr8Sessions()
 	if err != nil {
 		return err
+	}
+
+	if jsonout.Enabled {
+		if sessions == nil {
+			sessions = []tmux.Session{}
+		}
+		return jsonout.Write(sessions)
 	}
 
 	if len(sessions) == 0 {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/thomascarr/fr8/internal/jsonout"
 )
 
 func init() {
@@ -32,6 +33,12 @@ func runCd(cmd *cobra.Command, args []string) error {
 	ws, _, _, err := resolveWorkspace(name)
 	if err != nil {
 		return err
+	}
+
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Path string `json:"path"`
+		}{Path: ws.Path})
 	}
 
 	fmt.Print(ws.Path)

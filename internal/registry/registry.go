@@ -75,7 +75,7 @@ func (r *Registry) Save(path string) error {
 // Add appends a repo to the registry. Returns an error if the name already exists.
 func (r *Registry) Add(repo Repo) error {
 	if r.Find(repo.Name) != nil {
-		return fmt.Errorf("repo %q already registered", repo.Name)
+		return fmt.Errorf("repo %q already registered (use fr8 repo remove %s first to re-register)", repo.Name, repo.Name)
 	}
 	if r.FindByPath(repo.Path) != nil {
 		return fmt.Errorf("path %q already registered", repo.Path)
@@ -92,7 +92,7 @@ func (r *Registry) Remove(name string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("repo %q not found", name)
+	return fmt.Errorf("repo %q not found (see available: fr8 repo list)", name)
 }
 
 // Find returns the repo with the given name, or nil.

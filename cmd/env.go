@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/thomascarr/fr8/internal/env"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/jsonout"
 )
 
 func init() {
@@ -36,6 +37,19 @@ func runEnv(cmd *cobra.Command, args []string) error {
 	defaultBranch, _ := git.DefaultBranch(rootPath)
 
 	vars := env.BuildFr8Only(ws, rootPath, defaultBranch)
+
+	if jsonout.Enabled {
+		// Output FR8_* vars only as a map (skip CONDUCTOR_* compat vars)
+		envMap := make(map[string]string)
+		for _, v := range vars {
+			parts := strings.SplitN(v, "=", 2)
+			if len(parts) == 2 && strings.HasPrefix(parts[0], "FR8_") {
+				envMap[parts[0]] = parts[1]
+			}
+		}
+		return jsonout.Write(envMap)
+	}
+
 	for _, v := range vars {
 		parts := strings.SplitN(v, "=", 2)
 		if len(parts) == 2 {

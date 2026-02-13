@@ -7,7 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/thomascarr/fr8/internal/env"
+	"github.com/thomascarr/fr8/internal/exitcode"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/jsonout"
 	"github.com/thomascarr/fr8/internal/opener"
 	"github.com/thomascarr/fr8/internal/tmux"
 	"github.com/thomascarr/fr8/internal/tui"
@@ -26,6 +28,14 @@ var dashboardCmd = &cobra.Command{
 }
 
 func runDashboard(cmd *cobra.Command, args []string) error {
+	if jsonout.Enabled {
+		return &exitcode.ExitError{
+			Err:      fmt.Errorf("dashboard requires an interactive terminal and cannot be used with --json"),
+			ExitCode: exitcode.InteractiveOnly,
+			Code:     "interactive_only",
+		}
+	}
+
 	for {
 		result, err := tui.RunDashboard()
 		if err != nil {

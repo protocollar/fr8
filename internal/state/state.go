@@ -86,7 +86,7 @@ func (s *State) Remove(name string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("workspace %q not found", name)
+	return fmt.Errorf("workspace %q not found (see available: fr8 ws list)", name)
 }
 
 // Find returns the workspace with the given name, or nil.
@@ -139,7 +139,7 @@ func (s *State) Rename(oldName, newName string) error {
 	}
 	ws := s.Find(oldName)
 	if ws == nil {
-		return fmt.Errorf("workspace %q not found", oldName)
+		return fmt.Errorf("workspace %q not found (see available: fr8 ws list)", oldName)
 	}
 	ws.Name = newName
 	return nil

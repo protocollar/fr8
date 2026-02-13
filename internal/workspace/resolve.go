@@ -16,7 +16,7 @@ func Resolve(name string, st *state.State) (*state.Workspace, error) {
 	if name != "" {
 		ws := st.Find(name)
 		if ws == nil {
-			return nil, fmt.Errorf("workspace %q not found", name)
+			return nil, fmt.Errorf("workspace %q not found (see available: fr8 ws list)", name)
 		}
 		return ws, nil
 	}
@@ -85,7 +85,7 @@ func ResolveGlobal(name string) (*state.Workspace, string, string, error) {
 
 	switch len(matches) {
 	case 0:
-		return nil, "", "", fmt.Errorf("workspace %q not found in any registered repo", name)
+		return nil, "", "", fmt.Errorf("workspace %q not found in any registered repo (see repos: fr8 repo list)", name)
 	case 1:
 		m := matches[0]
 		return m.Workspace, m.RootPath, m.CommonDir, nil
@@ -130,7 +130,7 @@ func ResolveFromRepo(name, repoName string) (*state.Workspace, string, string, e
 
 	ws := st.Find(name)
 	if ws == nil {
-		return nil, "", "", fmt.Errorf("workspace %q not found in repo %q", name, repoName)
+		return nil, "", "", fmt.Errorf("workspace %q not found in repo %q (see available: fr8 ws list --repo %s)", name, repoName, repoName)
 	}
 
 	rootPath, err := git.RootWorktreePath(repo.Path)

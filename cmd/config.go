@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/thomascarr/fr8/internal/config"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/jsonout"
 )
 
 func init() {
@@ -45,7 +46,7 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 
 	rootPath, err := git.RootWorktreePath(cwd)
 	if err != nil {
-		return fmt.Errorf("not inside a git repository")
+		return fmt.Errorf("not inside a git repository (run from a repo or use --repo <name>)")
 	}
 
 	cfg, err := config.Load(rootPath)
@@ -59,10 +60,14 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 			"run":     cfg.Scripts.Run,
 			"archive": cfg.Scripts.Archive,
 		},
-		"portRange":    cfg.PortRange,
-		"basePort":     cfg.BasePort,
-		"worktreePath": cfg.WorktreePath,
+		"portRange":            cfg.PortRange,
+		"basePort":             cfg.BasePort,
+		"worktreePath":         cfg.WorktreePath,
 		"resolvedWorktreePath": config.ResolveWorktreePath(cfg, rootPath),
+	}
+
+	if jsonout.Enabled {
+		return jsonout.Write(resolved)
 	}
 
 	data, err := json.MarshalIndent(resolved, "", "  ")
@@ -81,7 +86,7 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 
 	rootPath, err := git.RootWorktreePath(cwd)
 	if err != nil {
-		return fmt.Errorf("not inside a git repository")
+		return fmt.Errorf("not inside a git repository (run from a repo or use --repo <name>)")
 	}
 
 	cfg, err := config.Load(rootPath)
@@ -90,7 +95,7 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 	}
 
 	var warnings []string
-	var errors []string
+	var configErrors []string
 
 	// Check script paths
 	for name, script := range map[string]string{
@@ -114,7 +119,7 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 	wtPath := config.ResolveWorktreePath(cfg, rootPath)
 	if info, err := os.Stat(wtPath); err == nil {
 		if !info.IsDir() {
-			errors = append(errors, fmt.Sprintf("worktreePath: %q exists but is not a directory", wtPath))
+			configErrors = append(configErrors, fmt.Sprintf("worktreePath: %q exists but is not a directory", wtPath))
 		}
 	}
 	// Parent must exist or be creatable — not an error if it doesn't exist yet
@@ -124,18 +129,30 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 		warnings = append(warnings, fmt.Sprintf("basePort: %d is a privileged port (< 1024)", cfg.BasePort))
 	}
 	if cfg.BasePort > 65535 {
-		errors = append(errors, fmt.Sprintf("basePort: %d is out of range (> 65535)", cfg.BasePort))
+		configErrors = append(configErrors, fmt.Sprintf("basePort: %d is out of range (> 65535)", cfg.BasePort))
 	}
 	if cfg.PortRange < 1 {
-		errors = append(errors, fmt.Sprintf("portRange: %d must be at least 1", cfg.PortRange))
+		configErrors = append(configErrors, fmt.Sprintf("portRange: %d must be at least 1", cfg.PortRange))
 	}
 	if cfg.BasePort+cfg.PortRange*100 > 65535 {
 		warnings = append(warnings, fmt.Sprintf("basePort %d + portRange %d may exhaust available ports with many workspaces", cfg.BasePort, cfg.PortRange))
 	}
 
-	if len(errors) > 0 {
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Valid    bool     `json:"valid"`
+			Errors   []string `json:"errors"`
+			Warnings []string `json:"warnings"`
+		}{
+			Valid:    len(configErrors) == 0,
+			Errors:   orEmpty(configErrors),
+			Warnings: orEmpty(warnings),
+		})
+	}
+
+	if len(configErrors) > 0 {
 		fmt.Println("Errors:")
-		for _, e := range errors {
+		for _, e := range configErrors {
 			fmt.Printf("  ✗ %s\n", e)
 		}
 	}
@@ -146,13 +163,20 @@ func runConfigValidate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if len(errors) == 0 && len(warnings) == 0 {
+	if len(configErrors) == 0 && len(warnings) == 0 {
 		fmt.Println("Configuration is valid.")
-	} else if len(errors) == 0 {
+	} else if len(configErrors) == 0 {
 		fmt.Println("\nConfiguration is valid with warnings.")
 	} else {
-		return fmt.Errorf("configuration has %d error(s)", len(errors))
+		return fmt.Errorf("configuration has %d error(s); fix the issues above in fr8.json", len(configErrors))
 	}
 
 	return nil
+}
+
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

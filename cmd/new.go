@@ -13,6 +13,7 @@ import (
 	"github.com/thomascarr/fr8/internal/env"
 	"github.com/thomascarr/fr8/internal/filesync"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/jsonout"
 	"github.com/thomascarr/fr8/internal/names"
 	"github.com/thomascarr/fr8/internal/port"
 	"github.com/thomascarr/fr8/internal/registry"
@@ -24,6 +25,8 @@ var newRemote string
 var newPR string
 var noSetup bool
 var noShell bool
+var newIfNotExists bool
+var newDryRun bool
 
 func init() {
 	newCmd.Flags().StringVarP(&newBranch, "branch", "b", "", "branch name (creates new branch if it doesn't exist)")
@@ -31,6 +34,8 @@ func init() {
 	newCmd.Flags().StringVarP(&newPR, "pull-request", "p", "", "create workspace from a GitHub pull request number (requires gh CLI)")
 	newCmd.Flags().BoolVar(&noSetup, "no-setup", false, "skip running the setup script")
 	newCmd.Flags().BoolVar(&noShell, "no-shell", false, "skip dropping into a workspace shell after creation")
+	newCmd.Flags().BoolVar(&newIfNotExists, "if-not-exists", false, "succeed silently if workspace already exists")
+	newCmd.Flags().BoolVar(&newDryRun, "dry-run", false, "show what would be created without doing it")
 	newCmd.MarkFlagsMutuallyExclusive("branch", "remote", "pull-request")
 	workspaceCmd.AddCommand(newCmd)
 }
@@ -78,7 +83,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		}
 
 		if !git.IsInsideWorkTree(cwd) {
-			return fmt.Errorf("not inside a git repository")
+			return fmt.Errorf("not inside a git repository (run from a repo or use --repo <name>)")
 		}
 
 		rootPath, err = git.RootWorktreePath(cwd)
@@ -101,7 +106,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("PR #%s → branch %s\n", newPR, resolved)
+		fmt.Fprintf(jsonout.MsgOut(), "PR #%s → branch %s\n", newPR, resolved)
 		branch = resolved
 		trackRemote = true
 	} else if newRemote != "" {
@@ -109,7 +114,10 @@ func runNew(cmd *cobra.Command, args []string) error {
 		trackRemote = true
 	}
 
-	ws, err := createWorkspace(rootPath, commonDir, nameFromArgs(args), branch, trackRemote, !noSetup, !noShell)
+	// When --json, never enter a subshell
+	enterShell := !noShell && !jsonout.Enabled
+
+	ws, err := createWorkspace(rootPath, commonDir, nameFromArgs(args), branch, trackRemote, !noSetup, enterShell)
 	if err != nil {
 		return err
 	}
@@ -159,7 +167,17 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 
 	// Workspace name
 	if wsName != "" {
-		if st.Find(wsName) != nil {
+		if existing := st.Find(wsName); existing != nil {
+			if newIfNotExists {
+				if jsonout.Enabled {
+					return existing, jsonout.Write(struct {
+						Action    string           `json:"action"`
+						Workspace *state.Workspace `json:"workspace"`
+					}{Action: "already_exists", Workspace: existing})
+				}
+				fmt.Fprintf(jsonout.MsgOut(), "Workspace %q already exists.\n", wsName)
+				return existing, nil
+			}
 			return nil, fmt.Errorf("workspace %q already exists", wsName)
 		}
 	} else {
@@ -174,7 +192,7 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 
 	startPoint := ""
 	remoteRef := "origin/" + defaultBranch
-	fmt.Printf("Fetching latest from origin...\n")
+	fmt.Fprintf(jsonout.MsgOut(), "Fetching latest from origin...\n")
 	if err := git.Fetch(rootPath, "origin"); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: git fetch failed: %v\n", err)
 	}
@@ -194,7 +212,7 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 			return nil, fmt.Errorf("remote branch %s not found (did you forget to push?)", remoteBranch)
 		}
 		if !git.BranchExists(rootPath, branch) {
-			fmt.Printf("Creating local branch %s tracking %s\n", branch, remoteBranch)
+			fmt.Fprintf(jsonout.MsgOut(), "Creating local branch %s tracking %s\n", branch, remoteBranch)
 			if err := git.CreateTrackingBranch(rootPath, branch, remoteBranch); err != nil {
 				return nil, fmt.Errorf("creating tracking branch: %w", err)
 			}
@@ -220,8 +238,31 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 	wtBase := config.ResolveWorktreePath(cfg, rootPath)
 	wsPath := filepath.Join(wtBase, wsName)
 
+	// Dry run: report what would be created without doing it
+	if newDryRun {
+		planned := state.Workspace{
+			Name:      wsName,
+			Path:      wsPath,
+			Branch:    branch,
+			Port:      allocatedPort,
+			CreatedAt: time.Now().UTC(),
+		}
+		if jsonout.Enabled {
+			return &planned, jsonout.Write(struct {
+				Action    string          `json:"action"`
+				Workspace state.Workspace `json:"workspace"`
+			}{Action: "dry_run", Workspace: planned})
+		}
+		fmt.Printf("Dry run — would create workspace:\n")
+		fmt.Printf("  Name:   %s\n", planned.Name)
+		fmt.Printf("  Branch: %s\n", planned.Branch)
+		fmt.Printf("  Port:   %d-%d\n", planned.Port, planned.Port+cfg.PortRange-1)
+		fmt.Printf("  Path:   %s\n", planned.Path)
+		return &planned, nil
+	}
+
 	// Create worktree
-	fmt.Printf("Creating workspace %q...\n", wsName)
+	fmt.Fprintf(jsonout.MsgOut(), "Creating workspace %q...\n", wsName)
 	if err := os.MkdirAll(wtBase, 0755); err != nil {
 		return nil, fmt.Errorf("creating worktree directory: %w", err)
 	}
@@ -252,20 +293,27 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 	autoRegisterRepo(rootPath)
 
 	// Sync files
-	fmt.Println("Syncing files...")
+	fmt.Fprintf(jsonout.MsgOut(), "Syncing files...\n")
 	if err := filesync.Sync(rootPath, wsPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: file sync failed: %v\n", err)
 	}
 
 	// Run setup script
 	if runSetup && cfg.Scripts.Setup != "" {
-		fmt.Printf("Running setup script: %s\n", cfg.Scripts.Setup)
+		fmt.Fprintf(jsonout.MsgOut(), "Running setup script: %s\n", cfg.Scripts.Setup)
 		envVars := env.Build(&ws, rootPath, defaultBranch)
 		if err := runScript(cfg.Scripts.Setup, wsPath, envVars); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: setup script failed: %v\n", err)
 			fmt.Fprintln(os.Stderr, "The workspace was created but setup did not complete.")
 			fmt.Fprintf(os.Stderr, "You can re-run setup with: cd %s && %s\n", wsPath, cfg.Scripts.Setup)
 		}
+	}
+
+	if jsonout.Enabled {
+		return &ws, jsonout.Write(struct {
+			Action    string          `json:"action"`
+			Workspace state.Workspace `json:"workspace"`
+		}{Action: "created", Workspace: ws})
 	}
 
 	// Print summary

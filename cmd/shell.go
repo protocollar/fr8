@@ -7,7 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/thomascarr/fr8/internal/env"
+	"github.com/thomascarr/fr8/internal/exitcode"
 	"github.com/thomascarr/fr8/internal/git"
+	"github.com/thomascarr/fr8/internal/jsonout"
 )
 
 func init() {
@@ -25,6 +27,14 @@ var shellCmd = &cobra.Command{
 }
 
 func runShell(cmd *cobra.Command, args []string) error {
+	if jsonout.Enabled {
+		return &exitcode.ExitError{
+			Err:      fmt.Errorf("shell requires an interactive terminal and cannot be used with --json"),
+			ExitCode: exitcode.InteractiveOnly,
+			Code:     "interactive_only",
+		}
+	}
+
 	var name string
 	if len(args) > 0 {
 		name = args[0]
