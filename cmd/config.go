@@ -203,7 +203,8 @@ func runConfigDoctor(cmd *cobra.Command, args []string) error {
 	// Handle --fix
 	var fixed []string
 	if doctorFix && len(fixableFiles) > 0 {
-		if isInteractive() {
+		switch {
+		case isInteractive():
 			fmt.Println("The following config files have deprecated camelCase keys:")
 			for _, f := range fixableFiles {
 				fmt.Printf("  %s\n", filepath.Base(f))
@@ -216,9 +217,9 @@ func runConfigDoctor(cmd *cobra.Command, args []string) error {
 				fmt.Println("Skipped.")
 				fixableFiles = nil
 			}
-		} else if jsonout.Enabled {
+		case jsonout.Enabled:
 			// In JSON mode --fix applies without prompting
-		} else {
+		default:
 			return exitcode.New("interactive_only", exitcode.InteractiveOnly,
 				"--fix requires an interactive terminal or --json mode")
 		}

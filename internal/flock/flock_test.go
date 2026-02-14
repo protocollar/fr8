@@ -15,7 +15,7 @@ func TestLockUnlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := Lock(f.Fd()); err != nil {
 		t.Fatalf("Lock: %v", err)
@@ -34,12 +34,12 @@ func TestLockIsExclusive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f1.Close()
+	defer func() { _ = f1.Close() }()
 
 	if err := Lock(f1.Fd()); err != nil {
 		t.Fatalf("Lock f1: %v", err)
 	}
-	defer Unlock(f1.Fd())
+	defer func() { _ = Unlock(f1.Fd()) }()
 
 	// Open a second fd and try a non-blocking lock — it should fail
 	// with EWOULDBLOCK since f1 holds the exclusive lock.
@@ -47,7 +47,7 @@ func TestLockIsExclusive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f2.Close()
+	defer func() { _ = f2.Close() }()
 
 	err = syscall.Flock(int(f2.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 	if err == nil {
@@ -64,7 +64,7 @@ func TestRelockAfterUnlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Lock, unlock, then lock again — should succeed
 	if err := Lock(f.Fd()); err != nil {

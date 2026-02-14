@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"os/exec"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -121,34 +120,4 @@ func TestRegisterMCPTools(t *testing.T) {
 			t.Errorf("missing tool %q", name)
 		}
 	}
-}
-
-// contains checks if s contains substr (same as exitcode.contains but local).
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-// initTestRepo creates a temporary git repo for integration tests.
-func initTestRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	cmds := [][]string{
-		{"git", "init"},
-		{"git", "config", "user.email", "test@test.com"},
-		{"git", "config", "user.name", "Test"},
-		{"git", "commit", "--allow-empty", "-m", "init"},
-	}
-	for _, args := range cmds {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v failed: %s", args, out)
-		}
-	}
-	return dir
 }
