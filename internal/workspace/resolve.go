@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 // Resolve finds a workspace by name, or detects it from the current directory.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thomascarr/fr8/internal/flock"
+	"github.com/protocollar/fr8/internal/flock"
 )
 
 const stateFile = "fr8.json"

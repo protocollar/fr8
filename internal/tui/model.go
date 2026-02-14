@@ -11,14 +11,14 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/thomascarr/fr8/internal/config"
-	"github.com/thomascarr/fr8/internal/env"
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/opener"
-	"github.com/thomascarr/fr8/internal/port"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
-	"github.com/thomascarr/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/config"
+	"github.com/protocollar/fr8/internal/env"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/opener"
+	"github.com/protocollar/fr8/internal/port"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 type model struct {

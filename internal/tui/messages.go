@@ -1,9 +1,9 @@
 package tui
 
 import (
-	"github.com/thomascarr/fr8/internal/opener"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/opener"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 type viewState int

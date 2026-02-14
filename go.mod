@@ -1,4 +1,4 @@
-module github.com/thomascarr/fr8
+module github.com/protocollar/fr8
 
 go 1.25.5
 

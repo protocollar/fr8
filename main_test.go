@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/thomascarr/fr8/cmd"
+	"github.com/protocollar/fr8/cmd"
 )
 
 func TestRootCommandExists(t *testing.T) {

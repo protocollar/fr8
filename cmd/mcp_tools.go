@@ -11,13 +11,13 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/thomascarr/fr8/internal/config"
-	"github.com/thomascarr/fr8/internal/env"
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
-	"github.com/thomascarr/fr8/internal/tmux"
-	"github.com/thomascarr/fr8/internal/workspace"
+	"github.com/protocollar/fr8/internal/config"
+	"github.com/protocollar/fr8/internal/env"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/workspace"
 )
 
 // mcpResult marshals v as JSON and returns it as MCP text content.

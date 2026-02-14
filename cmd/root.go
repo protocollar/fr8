@@ -8,12 +8,21 @@ import (
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/exitcode"
-	"github.com/thomascarr/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/exitcode"
+	"github.com/protocollar/fr8/internal/jsonout"
 )
 
 var jsonOutput bool
 var conciseOutput bool
+
+// Version info set by main via SetVersionInfo.
+var Version, Commit, Date string
+
+// SetVersionInfo sets version metadata injected at build time.
+func SetVersionInfo(v, c, d string) {
+	Version, Commit, Date = v, c, d
+	rootCmd.Version = fmt.Sprintf("%s (commit %s, built %s)", v, c, d)
+}
 
 var workspaceCmds = map[string]bool{
 	"new": true, "list": true, "status": true, "run": true,

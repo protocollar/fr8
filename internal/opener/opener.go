@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/thomascarr/fr8/internal/flock"
+	"github.com/protocollar/fr8/internal/flock"
 )
 
 // Opener defines a named command for opening a workspace in an external tool.

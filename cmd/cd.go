@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/jsonout"
 )
 
 func init() {

@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/thomascarr/fr8/internal/flock"
+	"github.com/protocollar/fr8/internal/flock"
 )
 
 // Repo is a registered repository.

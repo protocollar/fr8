@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/exitcode"
-	"github.com/thomascarr/fr8/internal/jsonout"
-	"github.com/thomascarr/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/exitcode"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 func init() {

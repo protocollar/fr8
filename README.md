@@ -5,7 +5,7 @@ Git worktree workspace manager. Creates isolated development environments with p
 ## Install
 
 ```bash
-go install github.com/thomascarr/fr8@latest
+go install github.com/protocollar/fr8@latest
 ```
 
 **Supported platforms:** macOS, Linux. Windows is not currently supported.

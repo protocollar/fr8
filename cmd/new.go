@@ -10,15 +10,15 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/config"
-	"github.com/thomascarr/fr8/internal/env"
-	"github.com/thomascarr/fr8/internal/filesync"
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/jsonout"
-	"github.com/thomascarr/fr8/internal/names"
-	"github.com/thomascarr/fr8/internal/port"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/config"
+	"github.com/protocollar/fr8/internal/env"
+	"github.com/protocollar/fr8/internal/filesync"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/names"
+	"github.com/protocollar/fr8/internal/port"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 var newBranch string

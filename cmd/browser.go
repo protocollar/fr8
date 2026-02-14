@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/jsonout"
-	"github.com/thomascarr/fr8/internal/port"
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/port"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 func init() {

@@ -4,8 +4,8 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
-	fr8mcp "github.com/thomascarr/fr8/internal/mcp"
-	"github.com/thomascarr/fr8/internal/jsonout"
+	fr8mcp "github.com/protocollar/fr8/internal/mcp"
+	"github.com/protocollar/fr8/internal/jsonout"
 )
 
 func init() {
@@ -23,7 +23,7 @@ func runMCPServe(cmd *cobra.Command, args []string) error {
 	// Suppress all human progress messages — stdout is used by MCP protocol
 	jsonout.SetMsgOut(io.Discard)
 
-	s := fr8mcp.NewServer("1.0.0")
+	s := fr8mcp.NewServer(Version)
 	registerMCPTools(s)
 	return fr8mcp.Serve(s)
 }

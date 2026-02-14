@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/jsonout"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
-	"github.com/thomascarr/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 var repoAddName string

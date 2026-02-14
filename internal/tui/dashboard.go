@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 // DashboardResult holds the outcome of the TUI session.

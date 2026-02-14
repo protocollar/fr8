@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 // Build returns a complete environment variable slice for running scripts
