@@ -18,7 +18,8 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
 
@@ -35,15 +36,12 @@ changelog:
       - "^ci:"
       - "^test:"
 
-brews:
-  - repository:
+homebrew_casks:
+  - binaries:
+      - fr8
+    repository:
       owner: protocollar
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/protocollar/fr8
     description: Manage git worktrees as isolated dev workspaces
-    license: MIT
-    install: |
-      bin.install "fr8"
-    test: |
-      system "#{bin}/fr8", "--version"
