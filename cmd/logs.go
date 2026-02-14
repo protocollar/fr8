@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/exitcode"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 var logsLines int
@@ -33,6 +35,14 @@ var logsCmd = &cobra.Command{
 }
 
 func runLogs(cmd *cobra.Command, args []string) error {
+	if logsFollow && jsonout.Enabled {
+		return &exitcode.ExitError{
+			Err:      fmt.Errorf("--follow requires an interactive terminal and cannot be used with --json"),
+			ExitCode: exitcode.InteractiveOnly,
+			Code:     "interactive_only",
+		}
+	}
+
 	if err := tmux.Available(); err != nil {
 		return err
 	}
@@ -54,6 +64,15 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+
+		if jsonout.Enabled {
+			return jsonout.Write(struct {
+				Workspace string `json:"workspace"`
+				Session   string `json:"session"`
+				Output    string `json:"output"`
+			}{Workspace: ws.Name, Session: sessionName, Output: output})
+		}
+
 		fmt.Print(output)
 		return nil
 	}

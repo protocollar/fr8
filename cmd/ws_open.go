@@ -4,14 +4,15 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/opener"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/opener"
 )
 
 var wsOpenOpener string
 
 func init() {
 	wsOpenCmd.Flags().StringVar(&wsOpenOpener, "opener", "", "opener to use (see: fr8 opener list)")
-	wsOpenCmd.RegisterFlagCompletionFunc("opener", openerNameCompletion)
+	_ = wsOpenCmd.RegisterFlagCompletionFunc("opener", openerNameCompletion)
 	workspaceCmd.AddCommand(wsOpenCmd)
 }
 
@@ -62,6 +63,9 @@ func runWsOpen(cmd *cobra.Command, args []string) error {
 	} else if d := opener.FindDefault(openers); d != nil {
 		o = d
 	} else {
+		if jsonout.Enabled {
+			return fmt.Errorf("multiple openers configured; specify one with --opener <name> (or set a default with: fr8 opener set-default <name>)")
+		}
 		fmt.Println("Multiple openers configured:")
 		for _, op := range openers {
 			fmt.Printf("  - %s\n", op.Name)
@@ -71,6 +75,15 @@ func runWsOpen(cmd *cobra.Command, args []string) error {
 
 	if err := opener.Run(*o, ws.Path); err != nil {
 		return fmt.Errorf("running opener %q: %w", o.Name, err)
+	}
+
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Action    string `json:"action"`
+			Workspace string `json:"workspace"`
+			Opener    string `json:"opener"`
+			Path      string `json:"path"`
+		}{Action: "opened", Workspace: ws.Name, Opener: o.Name, Path: ws.Path})
 	}
 
 	fmt.Printf("Opened %q with %s\n", ws.Name, o.Name)

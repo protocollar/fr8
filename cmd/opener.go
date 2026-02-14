@@ -8,7 +8,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/opener"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/opener"
 )
 
 func init() {
@@ -77,21 +78,28 @@ func runOpenerList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading openers: %w", err)
 	}
 
+	if jsonout.Enabled {
+		if openers == nil {
+			openers = []opener.Opener{}
+		}
+		return jsonout.Write(openers)
+	}
+
 	if len(openers) == 0 {
 		fmt.Println("No openers configured. Add one with: fr8 opener add <name> [command...]")
 		return nil
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCOMMAND\tDEFAULT")
+	_, _ = fmt.Fprintln(w, "NAME\tCOMMAND\tDEFAULT")
 	for _, o := range openers {
 		def := ""
 		if o.Default {
 			def = "(default)"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", o.Name, o.Command, def)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", o.Name, o.Command, def)
 	}
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }
 
@@ -116,10 +124,18 @@ func runOpenerAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("opener %q already exists (remove it first with: fr8 opener remove %s)", name, name)
 	}
 
-	openers = append(openers, opener.Opener{Name: name, Command: command})
+	o := opener.Opener{Name: name, Command: command}
+	openers = append(openers, o)
 
 	if err := opener.Save(path, openers); err != nil {
 		return fmt.Errorf("saving openers: %w", err)
+	}
+
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Action string        `json:"action"`
+			Opener opener.Opener `json:"opener"`
+		}{Action: "added", Opener: o})
 	}
 
 	fmt.Printf("Added opener %q (%s)\n", name, command)
@@ -154,6 +170,13 @@ func runOpenerSetDefault(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("saving openers: %w", err)
 	}
 
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Action string `json:"action"`
+			Name   string `json:"name"`
+		}{Action: "set_default", Name: name})
+	}
+
 	fmt.Printf("Set %q as default opener.\n", name)
 	return nil
 }
@@ -186,6 +209,13 @@ func runOpenerRemove(cmd *cobra.Command, args []string) error {
 
 	if err := opener.Save(path, openers); err != nil {
 		return fmt.Errorf("saving openers: %w", err)
+	}
+
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Action string `json:"action"`
+			Name   string `json:"name"`
+		}{Action: "removed", Name: name})
 	}
 
 	fmt.Printf("Removed opener %q.\n", name)

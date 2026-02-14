@@ -8,10 +8,11 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
-	"github.com/thomascarr/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 var listAll bool
@@ -64,11 +65,6 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Reconcile: remove workspaces whose paths no longer exist
 	reconcile(st, cwd)
 
-	if len(st.Workspaces) == 0 {
-		fmt.Println("No workspaces. Create one with: fr8 ws new")
-		return nil
-	}
-
 	// Determine repo name for tmux session lookup
 	hasTmux := tmux.Available() == nil
 	rootPath, _ := git.RootWorktreePath(cwd)
@@ -76,8 +72,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	defaultBranch, _ := git.DefaultBranch(rootPath)
 	hasFilters := listRunning || listDirty || listMerged
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tBRANCH\tPORT\tRUNNING\tPATH")
+	var items []workspaceListItem
 	for _, ws := range st.Workspaces {
 		running := false
 		if hasTmux {
@@ -103,16 +98,41 @@ func runList(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		runMark := ""
-		if running {
-			runMark = "●"
-		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", ws.Name, ws.Branch, ws.Port, runMark, ws.Path)
+		items = append(items, workspaceListItem{
+			Name:      ws.Name,
+			Branch:    ws.Branch,
+			Port:      ws.Port,
+			Path:      ws.Path,
+			Running:   running,
+			CreatedAt: ws.CreatedAt,
+		})
 	}
-	w.Flush()
 
 	// Save reconciled state
-	st.Save(commonDir)
+	_ = st.Save(commonDir)
+
+	if jsonout.Enabled {
+		if items == nil {
+			items = []workspaceListItem{}
+		}
+		return jsonout.Write(items)
+	}
+
+	if len(items) == 0 {
+		fmt.Println("No workspaces. Create one with: fr8 ws new")
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "NAME\tBRANCH\tPORT\tRUNNING\tPATH")
+	for _, item := range items {
+		runMark := ""
+		if item.Running {
+			runMark = "●"
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", item.Name, item.Branch, item.Port, runMark, item.Path)
+	}
+	_ = w.Flush()
 
 	return nil
 }
@@ -128,27 +148,25 @@ func runListAll() error {
 		return fmt.Errorf("loading registry: %w", err)
 	}
 
-	if len(reg.Repos) == 0 {
-		fmt.Println("No repos registered. Add one with: fr8 repo add")
-		return nil
-	}
-
 	hasTmux := tmux.Available() == nil
 	hasFilters := listRunning || listDirty || listMerged
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "REPO\tNAME\tBRANCH\tPORT\tRUNNING\tPATH")
+	var items []workspaceListItem
 
 	for _, repo := range reg.Repos {
 		commonDir, err := git.CommonDir(repo.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: unable to read %s: %v\n", repo.Name, err)
+			if !jsonout.Enabled {
+				fmt.Fprintf(os.Stderr, "Warning: unable to read %s: %v\n", repo.Name, err)
+			}
 			continue
 		}
 
 		st, err := state.Load(commonDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: unable to load state for %s: %v\n", repo.Name, err)
+			if !jsonout.Enabled {
+				fmt.Fprintf(os.Stderr, "Warning: unable to load state for %s: %v\n", repo.Name, err)
+			}
 			continue
 		}
 
@@ -180,15 +198,46 @@ func runListAll() error {
 				}
 			}
 
-			runMark := ""
-			if running {
-				runMark = "●"
-			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", repo.Name, ws.Name, ws.Branch, ws.Port, runMark, ws.Path)
+			items = append(items, workspaceListItem{
+				Repo:      repo.Name,
+				Name:      ws.Name,
+				Branch:    ws.Branch,
+				Port:      ws.Port,
+				Path:      ws.Path,
+				Running:   running,
+				CreatedAt: ws.CreatedAt,
+			})
 		}
 	}
 
-	w.Flush()
+	if jsonout.Enabled {
+		if items == nil {
+			items = []workspaceListItem{}
+		}
+		return jsonout.Write(items)
+	}
+
+	if len(reg.Repos) == 0 {
+		fmt.Println("No repos registered. Add one with: fr8 repo add")
+		return nil
+	}
+
+	if len(items) == 0 {
+		fmt.Println("No workspaces found.")
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "REPO\tNAME\tBRANCH\tPORT\tRUNNING\tPATH")
+	for _, item := range items {
+		runMark := ""
+		if item.Running {
+			runMark = "●"
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n", item.Repo, item.Name, item.Branch, item.Port, runMark, item.Path)
+	}
+	_ = w.Flush()
+
 	return nil
 }
 

@@ -1,13 +1,16 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/env"
-	"github.com/thomascarr/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/env"
+	"github.com/protocollar/fr8/internal/exitcode"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/jsonout"
 )
 
 func init() {
@@ -25,6 +28,14 @@ var shellCmd = &cobra.Command{
 }
 
 func runShell(cmd *cobra.Command, args []string) error {
+	if jsonout.Enabled {
+		return &exitcode.ExitError{
+			Err:      fmt.Errorf("shell requires an interactive terminal and cannot be used with --json"),
+			ExitCode: exitcode.InteractiveOnly,
+			Code:     "interactive_only",
+		}
+	}
+
 	var name string
 	if len(args) > 0 {
 		name = args[0]
@@ -56,7 +67,8 @@ func runShell(cmd *cobra.Command, args []string) error {
 
 	if err := c.Run(); err != nil {
 		// Non-zero exit from the shell is normal (user typed exit)
-		if _, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			return nil
 		}
 		return err

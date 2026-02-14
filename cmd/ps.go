@@ -6,7 +6,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 func init() {
@@ -30,16 +31,23 @@ func runPS(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if jsonout.Enabled {
+		if sessions == nil {
+			sessions = []tmux.Session{}
+		}
+		return jsonout.Write(sessions)
+	}
+
 	if len(sessions) == 0 {
 		fmt.Println("No running workspaces.")
 		return nil
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "REPO\tWORKSPACE\tSESSION")
+	_, _ = fmt.Fprintln(w, "REPO\tWORKSPACE\tSESSION")
 	for _, s := range sessions {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", s.Repo, s.Workspace, s.Name)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", s.Repo, s.Workspace, s.Name)
 	}
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }

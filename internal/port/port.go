@@ -25,7 +25,7 @@ func Allocate(allocatedPorts []int, basePort, portRange int) (int, error) {
 			return candidate, nil
 		}
 	}
-	return 0, fmt.Errorf("no free port block found (tried %d-%d)", basePort, basePort+100*portRange)
+	return 0, fmt.Errorf("no free port block found (tried %d-%d); try archiving unused workspaces with: fr8 ws archive", basePort, basePort+100*portRange)
 }
 
 // IsFree returns true if the port is not in use.
@@ -34,6 +34,6 @@ func IsFree(port int) bool {
 	if err != nil {
 		return true // connection refused = port is free
 	}
-	conn.Close()
+	_ = conn.Close()
 	return false
 }

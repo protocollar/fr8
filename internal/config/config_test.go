@@ -8,12 +8,14 @@ import (
 
 func TestLoadFr8Json(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "fr8.json"), []byte(`{
+	if err := os.WriteFile(filepath.Join(dir, "fr8.json"), []byte(`{
 		"scripts": {"setup": "make setup", "run": "make run", "archive": "make clean"},
 		"portRange": 5,
 		"basePort": 3000,
 		"worktreePath": "/tmp/ws"
-	}`), 0644)
+	}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -35,9 +37,11 @@ func TestLoadFr8Json(t *testing.T) {
 
 func TestLoadFallbackToConductorJson(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "conductor.json"), []byte(`{
+	if err := os.WriteFile(filepath.Join(dir, "conductor.json"), []byte(`{
 		"scripts": {"setup": "bin/conductor setup"}
-	}`), 0644)
+	}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -50,8 +54,12 @@ func TestLoadFallbackToConductorJson(t *testing.T) {
 
 func TestLoadFr8JsonTakesPrecedence(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "fr8.json"), []byte(`{"scripts": {"setup": "fr8-setup"}}`), 0644)
-	os.WriteFile(filepath.Join(dir, "conductor.json"), []byte(`{"scripts": {"setup": "conductor-setup"}}`), 0644)
+	if err := os.WriteFile(filepath.Join(dir, "fr8.json"), []byte(`{"scripts": {"setup": "fr8-setup"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "conductor.json"), []byte(`{"scripts": {"setup": "conductor-setup"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -85,7 +93,9 @@ func TestLoadNoConfigFile(t *testing.T) {
 
 func TestLoadInvalidJson(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "fr8.json"), []byte(`{invalid`), 0644)
+	if err := os.WriteFile(filepath.Join(dir, "fr8.json"), []byte(`{invalid`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := Load(dir)
 	if err == nil {

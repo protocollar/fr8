@@ -78,7 +78,8 @@ func renderWorkspaceList(m model) string {
 	b.WriteString("\n")
 
 	// Detail pane or archive confirmation
-	if m.view == viewConfirmArchive && m.archiveIdx < len(m.workspaces) {
+	switch {
+	case m.view == viewConfirmArchive && m.archiveIdx < len(m.workspaces):
 		ws := m.workspaces[m.archiveIdx]
 		msg := fmt.Sprintf("Archive %q?", ws.Workspace.Name)
 		if ws.Dirty {
@@ -93,7 +94,7 @@ func renderWorkspaceList(m model) string {
 				helpKeyStyle.Render("n") + " " + helpDescStyle.Render("no"),
 		)
 		b.WriteString(renderTitledPanel("Confirm", detail.String(), w))
-	} else if m.view == viewConfirmBatchArchive && len(m.batchArchiveNames) > 0 {
+	case m.view == viewConfirmBatchArchive && len(m.batchArchiveNames) > 0:
 		var detail strings.Builder
 		detail.WriteString(confirmStyle.Render(fmt.Sprintf("Archive %d merged+clean workspaces?", len(m.batchArchiveNames))))
 		detail.WriteString("\n\n")
@@ -107,7 +108,7 @@ func renderWorkspaceList(m model) string {
 				helpKeyStyle.Render("n") + " " + helpDescStyle.Render("no"),
 		)
 		b.WriteString(renderTitledPanel("Confirm Batch Archive", detail.String(), w))
-	} else if m.cursor < len(m.workspaces) {
+	case m.cursor < len(m.workspaces):
 		item := m.workspaces[m.cursor]
 		var detail strings.Builder
 		detail.WriteString(renderDetailRow("Branch", item.Workspace.Branch))

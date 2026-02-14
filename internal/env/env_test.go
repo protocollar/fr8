@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 func TestBuildContainsAllVars(t *testing.T) {

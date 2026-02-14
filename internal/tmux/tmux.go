@@ -15,9 +15,9 @@ var execFunc = syscall.Exec
 
 // Session represents a running fr8 tmux session.
 type Session struct {
-	Name      string // full session name, e.g. "fr8/myrepo/cool-workspace"
-	Repo      string
-	Workspace string
+	Name      string `json:"name"`      // full session name, e.g. "fr8/myrepo/cool-workspace"
+	Repo      string `json:"repo"`
+	Workspace string `json:"workspace"`
 }
 
 // Available checks whether tmux is installed and runnable.
@@ -45,7 +45,7 @@ func RepoName(rootPath string) string {
 // the user's shell environment is inherited by tmux automatically.
 func Start(name, dir, command string, envVars []string) error {
 	if IsRunning(name) {
-		return fmt.Errorf("session %q is already running", name)
+		return fmt.Errorf("session %q is already running (use fr8 ws attach to connect)", name)
 	}
 
 	// Build export commands for FR8/CONDUCTOR env vars only
@@ -93,7 +93,7 @@ func IsRunning(name string) bool {
 // This mirrors the syscall.Exec pattern used by fr8 ws shell.
 func Attach(name string) error {
 	if !IsRunning(name) {
-		return fmt.Errorf("session %q is not running", name)
+		return fmt.Errorf("session %q is not running (start with: fr8 ws run)", name)
 	}
 
 	tmuxPath, err := exec.LookPath("tmux")
@@ -109,7 +109,7 @@ func Attach(name string) error {
 // needs to retain control afterward, e.g. to return to the TUI dashboard.
 func AttachRun(name string) error {
 	if !IsRunning(name) {
-		return fmt.Errorf("session %q is not running", name)
+		return fmt.Errorf("session %q is not running (start with: fr8 ws run)", name)
 	}
 
 	cmd := exec.Command("tmux", "attach-session", "-t", name)
@@ -123,7 +123,7 @@ func AttachRun(name string) error {
 // lines controls how many lines of scrollback to capture.
 func CapturePanes(name string, lines int) (string, error) {
 	if !IsRunning(name) {
-		return "", fmt.Errorf("session %q is not running", name)
+		return "", fmt.Errorf("session %q is not running (start with: fr8 ws run)", name)
 	}
 
 	startLine := fmt.Sprintf("-%d", lines)

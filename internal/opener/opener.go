@@ -7,7 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
+
+	"github.com/protocollar/fr8/internal/flock"
 )
 
 // Opener defines a named command for opening a workspace in an external tool.
@@ -59,13 +60,13 @@ func Save(path string, openers []Opener) error {
 	if err != nil {
 		return fmt.Errorf("creating lock file: %w", err)
 	}
-	defer f.Close()
-	defer os.Remove(path + ".lock")
+	defer func() { _ = f.Close() }()
+	defer func() { _ = os.Remove(path + ".lock") }()
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := flock.Lock(f.Fd()); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer func() { _ = flock.Unlock(f.Fd()) }()
 
 	return os.WriteFile(path, data, 0644)
 }
@@ -102,7 +103,7 @@ func SetDefault(openers []Opener, name string) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("opener %q not found", name)
+		return fmt.Errorf("opener %q not found (see available: fr8 opener list)", name)
 	}
 	return nil
 }
@@ -117,9 +118,11 @@ func Run(o Opener, workspacePath string) error {
 	}
 	binPath, err := exec.LookPath(parts[0])
 	if err != nil {
-		return fmt.Errorf("%s: executable not found in $PATH", parts[0])
+		return fmt.Errorf("%s: executable not found in $PATH (check that it is installed and on your PATH)", parts[0])
 	}
-	args := append(parts[1:], workspacePath)
+	args := make([]string, len(parts)-1, len(parts))
+	copy(args, parts[1:])
+	args = append(args, workspacePath)
 	cmd := exec.Command(binPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

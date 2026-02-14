@@ -5,9 +5,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/thomascarr/fr8/internal/opener"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/opener"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 // Key helpers for constructing tea.KeyMsg values.

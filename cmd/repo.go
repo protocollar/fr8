@@ -5,11 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/registry"
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 var repoAddName string
@@ -57,6 +60,12 @@ var repoRemoveCmd = &cobra.Command{
 	RunE:              runRepoRemove,
 }
 
+type repoListItem struct {
+	Name       string               `json:"name"`
+	Path       string               `json:"path"`
+	Workspaces []workspaceListItem  `json:"workspaces,omitempty"`
+}
+
 func runRepoList(cmd *cobra.Command, args []string) error {
 	regPath, err := registry.DefaultPath()
 	if err != nil {
@@ -68,6 +77,18 @@ func runRepoList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading registry: %w", err)
 	}
 
+	if jsonout.Enabled {
+		items := make([]repoListItem, 0, len(reg.Repos))
+		for _, repo := range reg.Repos {
+			item := repoListItem{Name: repo.Name, Path: repo.Path}
+			if repoListWorkspaces {
+				item.Workspaces = repoWorkspaces(repo)
+			}
+			items = append(items, item)
+		}
+		return jsonout.Write(items)
+	}
+
 	if len(reg.Repos) == 0 {
 		fmt.Println("No repos registered. Add one with: fr8 repo add")
 		return nil
@@ -75,11 +96,11 @@ func runRepoList(cmd *cobra.Command, args []string) error {
 
 	if !repoListWorkspaces {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tPATH")
+		_, _ = fmt.Fprintln(w, "NAME\tPATH")
 		for _, repo := range reg.Repos {
-			fmt.Fprintf(w, "%s\t%s\n", repo.Name, repo.Path)
+			_, _ = fmt.Fprintf(w, "%s\t%s\n", repo.Name, repo.Path)
 		}
-		w.Flush()
+		_ = w.Flush()
 		return nil
 	}
 
@@ -106,12 +127,43 @@ func runRepoList(cmd *cobra.Command, args []string) error {
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		for _, ws := range st.Workspaces {
-			fmt.Fprintf(w, "  %s\t%s\t%d\n", ws.Name, ws.Branch, ws.Port)
+			_, _ = fmt.Fprintf(w, "  %s\t%s\t%d\n", ws.Name, ws.Branch, ws.Port)
 		}
-		w.Flush()
+		_ = w.Flush()
 	}
 
 	return nil
+}
+
+func repoWorkspaces(repo registry.Repo) []workspaceListItem {
+	commonDir, err := git.CommonDir(repo.Path)
+	if err != nil {
+		return []workspaceListItem{}
+	}
+
+	st, err := state.Load(commonDir)
+	if err != nil {
+		return []workspaceListItem{}
+	}
+
+	hasTmux := tmux.Available() == nil
+	items := make([]workspaceListItem, 0, len(st.Workspaces))
+	for _, ws := range st.Workspaces {
+		running := false
+		if hasTmux {
+			sessionName := tmux.SessionName(repo.Name, ws.Name)
+			running = tmux.IsRunning(sessionName)
+		}
+		items = append(items, workspaceListItem{
+			Name:      ws.Name,
+			Branch:    ws.Branch,
+			Port:      ws.Port,
+			Path:      ws.Path,
+			Running:   running,
+			CreatedAt: ws.CreatedAt,
+		})
+	}
+	return items
 }
 
 func runRepoAdd(cmd *cobra.Command, args []string) error {
@@ -138,7 +190,7 @@ func runRepoAdd(cmd *cobra.Command, args []string) error {
 
 	// Validate it's a git repo
 	if !git.IsInsideWorkTree(dir) {
-		return fmt.Errorf("%s is not a git repository", dir)
+		return fmt.Errorf("%s is not a git repository (navigate to a git repo or provide a path to one)", dir)
 	}
 
 	// Resolve to root worktree
@@ -170,6 +222,14 @@ func runRepoAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("saving registry: %w", err)
 	}
 
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Action string `json:"action"`
+			Name   string `json:"name"`
+			Path   string `json:"path"`
+		}{Action: "added", Name: name, Path: rootPath})
+	}
+
 	fmt.Printf("Registered %q → %s\n", name, rootPath)
 	return nil
 }
@@ -191,6 +251,13 @@ func runRepoRemove(cmd *cobra.Command, args []string) error {
 
 	if err := reg.Save(regPath); err != nil {
 		return fmt.Errorf("saving registry: %w", err)
+	}
+
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Action string `json:"action"`
+			Name   string `json:"name"`
+		}{Action: "removed", Name: args[0]})
 	}
 
 	fmt.Printf("Removed %q from registry.\n", args[0])
@@ -245,4 +312,24 @@ func repoNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([
 	}
 
 	return reg.Names(), cobra.ShellCompDirectiveNoFileComp
+}
+
+// workspaceListItem is the JSON schema for a workspace in list output.
+// Used by both ws list and repo list --workspaces.
+type workspaceListItem struct {
+	Repo      string    `json:"repo,omitempty"`
+	Name      string    `json:"name"`
+	Branch    string    `json:"branch"`
+	Port      int       `json:"port"`
+	Path      string    `json:"path"`
+	Running   bool      `json:"running"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (w workspaceListItem) Concise() any {
+	return struct {
+		Name    string `json:"name"`
+		Port    int    `json:"port"`
+		Running bool   `json:"running"`
+	}{Name: w.Name, Port: w.Port, Running: w.Running}
 }

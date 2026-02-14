@@ -3,7 +3,7 @@ package workspace
 import (
 	"testing"
 
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 func TestResolveByName(t *testing.T) {

@@ -101,10 +101,3 @@ var (
 	spinnerStyle = lipgloss.NewStyle().
 			Foreground(colorAccent)
 )
-
-// panelBorder returns a rounded border style with the palette border color.
-func panelBorder() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorBorder)
-}

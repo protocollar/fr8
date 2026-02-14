@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/state"
-	"github.com/thomascarr/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 func init() {
@@ -60,8 +61,17 @@ func runRename(cmd *cobra.Command, args []string) error {
 		oldSession := tmux.SessionName(repoName, oldName)
 		if tmux.IsRunning(oldSession) {
 			newSession := tmux.SessionName(repoName, newName)
-			tmux.RenameSession(oldSession, newSession)
+			_ = tmux.RenameSession(oldSession, newSession)
 		}
+	}
+
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Action  string `json:"action"`
+			OldName string `json:"old_name"`
+			NewName string `json:"new_name"`
+			Path    string `json:"path"`
+		}{Action: "renamed", OldName: oldName, NewName: newName, Path: newPath})
 	}
 
 	fmt.Printf("Renamed %q → %q\n", oldName, newName)

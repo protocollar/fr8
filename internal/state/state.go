@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/protocollar/fr8/internal/flock"
 )
 
 const stateFile = "fr8.json"
@@ -58,13 +59,13 @@ func (s *State) Save(gitCommonDir string) error {
 	if err != nil {
 		return fmt.Errorf("creating lock file: %w", err)
 	}
-	defer f.Close()
-	defer os.Remove(p + ".lock")
+	defer func() { _ = f.Close() }()
+	defer func() { _ = os.Remove(p + ".lock") }()
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := flock.Lock(f.Fd()); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer func() { _ = flock.Unlock(f.Fd()) }()
 
 	return os.WriteFile(p, data, 0644)
 }
@@ -86,7 +87,7 @@ func (s *State) Remove(name string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("workspace %q not found", name)
+	return fmt.Errorf("workspace %q not found (see available: fr8 ws list)", name)
 }
 
 // Find returns the workspace with the given name, or nil.
@@ -139,7 +140,7 @@ func (s *State) Rename(oldName, newName string) error {
 	}
 	ws := s.Find(oldName)
 	if ws == nil {
-		return fmt.Errorf("workspace %q not found", oldName)
+		return fmt.Errorf("workspace %q not found (see available: fr8 ws list)", oldName)
 	}
 	ws.Name = newName
 	return nil

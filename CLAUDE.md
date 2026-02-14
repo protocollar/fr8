@@ -12,12 +12,15 @@ Go CLI for managing git worktrees as isolated dev workspaces. See `README.md` fo
 ## Build & Test
 
 ```bash
-go build ./...          # Build all packages
-go build -o fr8 .       # Build binary
-go vet ./...            # Static analysis
-go test ./...           # Run tests
-go install .            # Install to GOPATH/bin
+go build ./...              # Build all packages
+go build -o fr8 .           # Build binary
+go vet ./...                # Static analysis
+go test ./...               # Run tests
+go test -race -count=1 ./...  # Exactly what CI runs
+go install .                # Install to GOPATH/bin
 ```
+
+CI also runs `golangci-lint` v2 — see `.claude/rules/ci.md`.
 
 ## Project Layout
 
@@ -58,14 +61,21 @@ internal/
 
 ## Conventions
 
-- All git operations shell out via `os/exec` — no go-git dependency
-- Workspace commands live under `fr8 workspace` (alias `fr8 ws`): new, list, status, env, open, archive, run, start, stop, attach, logs, ps, shell, cd, exec, browser
-- Workspace resolution: local (CWD git repo) first, falls back to global registry search when a name is given
-- `run`, `exec`, and `attach` commands use `syscall.Exec` to replace the process (clean signal handling)
-- `fr8 ws new` drops into a subshell after creation (`--no-shell` to skip); `-r`/`--remote` tracks a remote branch, `-p`/`--pull-request` resolves a GitHub PR (requires `gh`)
+Detailed conventions are in `.claude/rules/`:
+
+- `go-style.md` — Naming, struct tags, design principles
+- `cobra-commands.md` — How to add/modify CLI commands
+- `testing.md` — Test structure and running tests
+- `error-handling.md` — Error wrapping, exit codes, JSON errors
+- `package-organization.md` — Internal package responsibilities
+- `ci.md` — CI pipeline and cross-platform awareness
+- `git.md` — Commit message format and git etiquette
+- `mcp-server.md` — MCP tool definitions and handler patterns
+- `tui-components.md` — Bubble Tea model, messages, views, styles
+- `pull-requests.md` — PR description format and pre-flight checks
+
+Key architectural notes:
+
 - `createWorkspace()` in `cmd/new.go` is the shared creation function used by both CLI and TUI dashboard
 - Background process management uses tmux sessions named `fr8/<repo>/<workspace>`; graceful degradation when tmux is not installed
 - Workspace openers are stored at `~/.config/fr8/openers.json`; TUI picker shown when multiple are configured
-- State is JSON in `.git/fr8.json` with advisory file locking (`syscall.Flock`)
-- Sets both `FR8_*` and `CONDUCTOR_*` env vars for backwards compatibility
-- Config falls back from `fr8.json` → `conductor.json` in the repo root

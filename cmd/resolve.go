@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/state"
-	"github.com/thomascarr/fr8/internal/workspace"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/workspace"
 )
 
 // resolveWorkspace tries CWD-based resolution, falling back to global registry lookup.

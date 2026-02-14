@@ -5,13 +5,16 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/tmux"
 )
 
 var stopAll bool
+var stopIfRunning bool
 
 func init() {
 	stopCmd.Flags().BoolVarP(&stopAll, "all", "A", false, "Stop all running fr8 sessions")
+	stopCmd.Flags().BoolVar(&stopIfRunning, "if-running", false, "succeed silently if not running")
 	workspaceCmd.AddCommand(stopCmd)
 }
 
@@ -47,12 +50,38 @@ func runStop(cmd *cobra.Command, args []string) error {
 
 	sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
 	if !tmux.IsRunning(sessionName) {
+		if stopIfRunning {
+			if jsonout.Enabled {
+				return jsonout.Write(struct {
+					Action    string `json:"action"`
+					Workspace string `json:"workspace"`
+					Session   string `json:"session"`
+				}{Action: "not_running", Workspace: ws.Name, Session: sessionName})
+			}
+			fmt.Printf("Workspace %q is not running.\n", ws.Name)
+			return nil
+		}
+		if jsonout.Enabled {
+			return jsonout.Write(struct {
+				Action    string `json:"action"`
+				Workspace string `json:"workspace"`
+				Session   string `json:"session"`
+			}{Action: "not_running", Workspace: ws.Name, Session: sessionName})
+		}
 		fmt.Printf("Workspace %q is not running.\n", ws.Name)
 		return nil
 	}
 
 	if err := tmux.Stop(sessionName); err != nil {
 		return err
+	}
+
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			Action    string `json:"action"`
+			Workspace string `json:"workspace"`
+			Session   string `json:"session"`
+		}{Action: "stopped", Workspace: ws.Name, Session: sessionName})
 	}
 
 	fmt.Printf("Stopped %q.\n", ws.Name)
@@ -70,20 +99,42 @@ func runStopAll() error {
 	}
 
 	if len(sessions) == 0 {
+		if jsonout.Enabled {
+			return jsonout.Write(struct {
+				Stopped []string        `json:"stopped"`
+				Failed  []runFailedItem `json:"failed"`
+			}{Stopped: []string{}, Failed: []runFailedItem{}})
+		}
 		fmt.Println("No running fr8 sessions.")
 		return nil
 	}
 
-	var stopped int
+	var stopped []string
+	var failed []runFailedItem
 	for _, s := range sessions {
 		if err := tmux.Stop(s.Name); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to stop %q: %v\n", s.Name, err)
+			if !jsonout.Enabled {
+				fmt.Fprintf(os.Stderr, "Warning: failed to stop %q: %v\n", s.Name, err)
+			}
+			failed = append(failed, runFailedItem{Workspace: s.Workspace, Error: err.Error()})
 			continue
 		}
-		fmt.Printf("Stopped %q\n", s.Name)
-		stopped++
+		if !jsonout.Enabled {
+			fmt.Printf("Stopped %q\n", s.Name)
+		}
+		stopped = append(stopped, s.Workspace)
 	}
 
-	fmt.Printf("Stopped %d session(s).\n", stopped)
+	if jsonout.Enabled {
+		if failed == nil {
+			failed = []runFailedItem{}
+		}
+		return jsonout.Write(struct {
+			Stopped []string        `json:"stopped"`
+			Failed  []runFailedItem `json:"failed"`
+		}{Stopped: orEmpty(stopped), Failed: failed})
+	}
+
+	fmt.Printf("Stopped %d session(s).\n", len(stopped))
 	return nil
 }

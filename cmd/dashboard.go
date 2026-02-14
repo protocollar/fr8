@@ -1,16 +1,19 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/env"
-	"github.com/thomascarr/fr8/internal/git"
-	"github.com/thomascarr/fr8/internal/opener"
-	"github.com/thomascarr/fr8/internal/tmux"
-	"github.com/thomascarr/fr8/internal/tui"
+	"github.com/protocollar/fr8/internal/env"
+	"github.com/protocollar/fr8/internal/exitcode"
+	"github.com/protocollar/fr8/internal/git"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/opener"
+	"github.com/protocollar/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/tui"
 )
 
 func init() {
@@ -26,6 +29,14 @@ var dashboardCmd = &cobra.Command{
 }
 
 func runDashboard(cmd *cobra.Command, args []string) error {
+	if jsonout.Enabled {
+		return &exitcode.ExitError{
+			Err:      fmt.Errorf("dashboard requires an interactive terminal and cannot be used with --json"),
+			ExitCode: exitcode.InteractiveOnly,
+			Code:     "interactive_only",
+		}
+	}
+
 	for {
 		result, err := tui.RunDashboard()
 		if err != nil {
@@ -54,7 +65,8 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 			c.Stdin = os.Stdin
 
 			if err := c.Run(); err != nil {
-				if _, ok := err.(*exec.ExitError); !ok {
+				var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
 					return err
 				}
 			}

@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
+
+	"github.com/protocollar/fr8/internal/flock"
 )
 
 // Repo is a registered repository.
@@ -61,13 +62,13 @@ func (r *Registry) Save(path string) error {
 	if err != nil {
 		return fmt.Errorf("creating lock file: %w", err)
 	}
-	defer f.Close()
-	defer os.Remove(path + ".lock")
+	defer func() { _ = f.Close() }()
+	defer func() { _ = os.Remove(path + ".lock") }()
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := flock.Lock(f.Fd()); err != nil {
 		return fmt.Errorf("acquiring lock: %w", err)
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer func() { _ = flock.Unlock(f.Fd()) }()
 
 	return os.WriteFile(path, data, 0644)
 }
@@ -75,7 +76,7 @@ func (r *Registry) Save(path string) error {
 // Add appends a repo to the registry. Returns an error if the name already exists.
 func (r *Registry) Add(repo Repo) error {
 	if r.Find(repo.Name) != nil {
-		return fmt.Errorf("repo %q already registered", repo.Name)
+		return fmt.Errorf("repo %q already registered (use fr8 repo remove %s first to re-register)", repo.Name, repo.Name)
 	}
 	if r.FindByPath(repo.Path) != nil {
 		return fmt.Errorf("path %q already registered", repo.Path)
@@ -92,7 +93,7 @@ func (r *Registry) Remove(name string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("repo %q not found", name)
+	return fmt.Errorf("repo %q not found (see available: fr8 repo list)", name)
 }
 
 // Find returns the repo with the given name, or nil.

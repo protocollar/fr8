@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/thomascarr/fr8/internal/port"
-	"github.com/thomascarr/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/port"
+	"github.com/protocollar/fr8/internal/state"
 )
 
 func init() {
@@ -35,11 +36,21 @@ func runBrowser(cmd *cobra.Command, args []string) error {
 }
 
 func openWorkspaceBrowser(ws *state.Workspace) error {
-	if port.IsFree(ws.Port) {
+	listening := !port.IsFree(ws.Port)
+	url := fmt.Sprintf("http://localhost:%d", ws.Port)
+
+	if jsonout.Enabled {
+		return jsonout.Write(struct {
+			URL           string `json:"url"`
+			Workspace     string `json:"workspace"`
+			PortListening bool   `json:"port_listening"`
+		}{URL: url, Workspace: ws.Name, PortListening: listening})
+	}
+
+	if !listening {
 		fmt.Printf("Warning: nothing seems to be listening on :%d\n", ws.Port)
 	}
 
-	url := fmt.Sprintf("http://localhost:%d", ws.Port)
 	fmt.Printf("Opening %s for workspace %q\n", url, ws.Name)
 	return openBrowser(url)
 }
