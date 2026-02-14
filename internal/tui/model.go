@@ -223,7 +223,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.batchArchiveNames = nil
 		m.err = nil
 		if len(msg.failed) > 0 {
-			m.err = fmt.Errorf("failed to archive: %s", strings.Join(msg.failed, ", "))
+			m.err = fmt.Errorf("archiving: %s", strings.Join(msg.failed, ", "))
 		}
 		m.view = viewWorkspaceList
 		return m, nil

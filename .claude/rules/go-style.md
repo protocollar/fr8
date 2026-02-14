@@ -18,7 +18,7 @@
 - Define interfaces at the consumer site, not the implementation site
 - Avoid premature interfaces — only when 2+ implementations exist or needed for testing
 - Zero value should be useful where possible (nil slices work as empty)
-- Use `os.UserConfigDir()` / `os.UserCacheDir()` for platform-appropriate paths
+- Config path: `~/.config/fr8/` via `os.UserHomeDir()` — not `os.UserConfigDir()` (which maps to `~/Library/Application Support` on macOS, wrong for CLI tools)
 
 ## Error Messages
 

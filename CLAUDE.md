@@ -78,4 +78,4 @@ Key architectural notes:
 
 - `createWorkspace()` in `cmd/new.go` is the shared creation function used by both CLI and TUI dashboard
 - Background process management uses tmux sessions named `fr8/<repo>/<workspace>`; graceful degradation when tmux is not installed
-- Workspace openers are stored at `~/.config/fr8/openers.json`; TUI picker shown when multiple are configured
+- Workspace openers are stored at `~/.config/fr8/openers.json`; TUI picker shown when multiple workspaces are configured

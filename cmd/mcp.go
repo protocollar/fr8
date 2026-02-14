@@ -55,7 +55,7 @@ AVAILABLE TOOLS
   workspace_rename    Rename a workspace
   repo_list           List registered repos
   config_show         Show resolved fr8 configuration for a repo
-  config_validate     Validate fr8 configuration and report errors/warnings
+  config_doctor       Check fr8 configuration health and report errors/warnings
 
 All tools accept an optional "repo" parameter to target a specific registered
 repo. The server uses the global registry for workspace resolution.
