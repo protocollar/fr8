@@ -60,7 +60,7 @@ All workspace commands live under `fr8 ws` (alias `fr8 workspace`).
 | `fr8 ws browser [name]`                                       | Open workspace dev server in the browser               |
 | `fr8 ws archive [name] [--force]`                             | Tear down workspace (archive script + remove worktree) |
 | `fr8 dashboard`                                               | Interactive TUI for browsing repos and workspaces      |
-| `fr8 config show\|validate`                                   | View and validate configuration                        |
+| `fr8 config show\|doctor [--fix]`                             | View config or check health (fix issues with --fix)    |
 | `fr8 repo add\|list\|remove`                                  | Manage the global repo registry                        |
 | `fr8 opener add\|list\|remove\|set-default`                   | Manage workspace openers (e.g. VSCode, Cursor)         |
 | `fr8 completion [bash\|zsh\|fish]`                            | Generate shell completions                             |
@@ -82,9 +82,9 @@ Create `fr8.json` in your repo root:
     "run": "bin/run-workspace",
     "archive": "bin/archive-workspace"
   },
-  "portRange": 10,
-  "basePort": 8000,
-  "worktreePath": "~/fr8"
+  "port_range": 10,
+  "base_port": 8000,
+  "worktree_path": "~/fr8"
 }
 ```
 
@@ -93,13 +93,15 @@ Create `fr8.json` in your repo root:
 | `scripts.setup`   |         | Command to run after creating a workspace                             |
 | `scripts.run`     |         | Command to start the dev server                                       |
 | `scripts.archive` |         | Command to run before removing a workspace                            |
-| `portRange`       | `10`    | Number of consecutive ports per workspace                             |
-| `basePort`        | `8000`  | Starting port for allocation                                          |
-| `worktreePath`    | `~/fr8` | Where to create worktrees (supports `~`, relative, or absolute paths) |
+| `port_range`      | `10`    | Number of consecutive ports per workspace                             |
+| `base_port`       | `8000`  | Starting port for allocation                                          |
+| `worktree_path`   | `~/fr8` | Where to create worktrees (supports `~`, relative, or absolute paths) |
 
 Falls back to `conductor.json` if `fr8.json` doesn't exist, so projects using [Conductor](https://conductor.build) work without changes.
 
-Use `fr8 config show` to see the resolved configuration (with defaults applied) and `fr8 config validate` to check for issues.
+Legacy camelCase keys (`portRange`, `basePort`, `worktreePath`) are still accepted but deprecated. Run `fr8 config doctor --fix` to migrate automatically.
+
+Use `fr8 config show` to see the resolved configuration (with defaults applied) and `fr8 config doctor` to check for issues.
 
 ## How It Works
 
@@ -201,9 +203,9 @@ Supports glob patterns including `**`. Files are only copied when their content 
 
 ### Port Allocation
 
-Ports are allocated sequentially in blocks of `portRange` (default 10) starting from `basePort`. Each workspace gets exclusive use of its block. Your scripts can use the base port (`FR8_PORT`) and offset from it for additional services (e.g. Redis on `FR8_PORT + 1`).
+Ports are allocated sequentially in blocks of `port_range` (default 10) starting from `base_port`. Each workspace gets exclusive use of its block. Your scripts can use the base port (`FR8_PORT`) and offset from it for additional services (e.g. Redis on `FR8_PORT + 1`).
 
-When allocating ports, fr8 checks all registered repos (see `fr8 repo list`) to avoid conflicts across projects that share the same `basePort`. If the global registry is unavailable, allocation falls back to the current repo's ports only.
+When allocating ports, fr8 checks all registered repos (see `fr8 repo list`) to avoid conflicts across projects that share the same `base_port`. If the global registry is unavailable, allocation falls back to the current repo's ports only.
 
 ### State
 
@@ -339,7 +341,7 @@ The MCP server exposes 12 tools:
 | `workspace_rename`   | Rename a workspace                                             |
 | `repo_list`          | List registered repos (optionally include workspace details)   |
 | `config_show`        | Show resolved fr8 configuration for a repo                     |
-| `config_validate`    | Validate fr8 configuration and report errors/warnings          |
+| `config_doctor`      | Check fr8 configuration health and report errors/warnings      |
 
 All tools accept an optional `repo` parameter to target a specific registered repo. The MCP server uses the global registry for workspace resolution (it does not auto-detect from CWD since it runs as a long-lived process).
 
@@ -402,4 +404,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)

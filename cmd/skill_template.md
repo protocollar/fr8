@@ -37,7 +37,7 @@ Human messages are suppressed in JSON mode. Errors appear on stderr as JSON:
 | Rename workspace  | `fr8 ws rename <old> <new> --json`    |                                                                                       |
 | List repos        | `fr8 repo list --json`                | `-w` (include workspaces)                                                             |
 | Show config       | `fr8 config show --json`              | `--repo <name>`                                                                       |
-| Validate config   | `fr8 config validate --json`          | `--repo <name>`                                                                       |
+| Check config      | `fr8 config doctor --json`            | `--fix`, `--repo <name>`                                                              |
 
 ## Exit Codes
 

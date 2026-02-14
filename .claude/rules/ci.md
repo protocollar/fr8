@@ -27,4 +27,4 @@ CI config: `.github/workflows/ci.yml`
 - Tests run on Windows — `syscall.Flock` is Unix-only
 - File-locking code (`state/`, `registry/`) needs build tags or conditional compilation if tests fail on Windows
 - Use `filepath.Join()` not string concatenation for paths
-- Use `os.UserConfigDir()` not hardcoded `~/.config`
+- Config path uses `~/.config/fr8/` (intentional — `os.UserConfigDir()` maps to `~/Library/Application Support` on macOS which is wrong for CLI tools)

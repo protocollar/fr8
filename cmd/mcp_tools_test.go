@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"os"
-	"os/exec"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -83,59 +81,14 @@ func TestMcpResolveWorkspaceWithRepoNoName(t *testing.T) {
 	}
 }
 
-func TestMcpResolveRepoFromCWD(t *testing.T) {
-	dir := initTestRepo(t)
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.Chdir(origDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
-	rootPath, commonDir, err := mcpResolveRepo("")
-	if err != nil {
-		t.Fatalf("mcpResolveRepo from git repo: %v", err)
-	}
-	if rootPath == "" {
-		t.Error("rootPath should not be empty")
-	}
-	if commonDir == "" {
-		t.Error("commonDir should not be empty")
-	}
-}
-
-func TestMcpResolveRepoNotGitRepo(t *testing.T) {
-	dir := t.TempDir()
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.Chdir(origDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, err = mcpResolveRepo("")
+func TestMcpResolveRepoRequiresParam(t *testing.T) {
+	_, _, err := mcpResolveRepo("")
 	if err == nil {
-		t.Fatal("expected error outside git repo")
+		t.Fatal("expected error for empty repo param")
 	}
-	want := "not inside a git repository"
-	if !contains(err.Error(), want) {
-		t.Errorf("error = %q, want to contain %q", err.Error(), want)
+	want := "repo parameter is required"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
 	}
 }
 
@@ -156,7 +109,7 @@ func TestRegisterMCPTools(t *testing.T) {
 		"workspace_rename",
 		"repo_list",
 		"config_show",
-		"config_validate",
+		"config_doctor",
 	}
 
 	if len(tools) != len(expectedTools) {
@@ -167,34 +120,4 @@ func TestRegisterMCPTools(t *testing.T) {
 			t.Errorf("missing tool %q", name)
 		}
 	}
-}
-
-// contains checks if s contains substr (same as exitcode.contains but local).
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-// initTestRepo creates a temporary git repo for integration tests.
-func initTestRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	cmds := [][]string{
-		{"git", "init"},
-		{"git", "config", "user.email", "test@test.com"},
-		{"git", "config", "user.name", "Test"},
-		{"git", "commit", "--allow-empty", "-m", "init"},
-	}
-	for _, args := range cmds {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%v failed: %s", args, out)
-		}
-	}
-	return dir
 }

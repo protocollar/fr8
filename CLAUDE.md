@@ -12,15 +12,16 @@ Go CLI for managing git worktrees as isolated dev workspaces. See `README.md` fo
 ## Build & Test
 
 ```bash
-go build ./...              # Build all packages
-go build -o fr8 .           # Build binary
-go vet ./...                # Static analysis
-go test ./...               # Run tests
+bin/ci                        # Run all CI checks locally (build, vet, test, lint, tidy)
+go build ./...                # Build all packages
+go build -o fr8 .             # Build binary
+go vet ./...                  # Static analysis
+go test ./...                 # Run tests
 go test -race -count=1 ./...  # Exactly what CI runs
-go install .                # Install to GOPATH/bin
+go install .                  # Install to GOPATH/bin
 ```
 
-CI also runs `golangci-lint` v2 — see `.claude/rules/ci.md`.
+CI also runs `golangci-lint` v2 — see `.claude/rules/ci.md`. Run `bin/ci` to approximate the full CI pipeline locally before pushing.
 
 ## Project Layout
 
@@ -78,4 +79,4 @@ Key architectural notes:
 
 - `createWorkspace()` in `cmd/new.go` is the shared creation function used by both CLI and TUI dashboard
 - Background process management uses tmux sessions named `fr8/<repo>/<workspace>`; graceful degradation when tmux is not installed
-- Workspace openers are stored at `~/.config/fr8/openers.json`; TUI picker shown when multiple are configured
+- Workspace openers are stored at `~/.config/fr8/openers.json`; TUI picker shown when multiple workspaces are configured

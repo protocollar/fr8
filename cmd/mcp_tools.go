@@ -53,43 +53,30 @@ func mcpResolveWorkspace(name, repo string) (*state.Workspace, string, string, e
 }
 
 // mcpResolveRepo resolves a repo's root path and git common dir from a repo name.
-// If repo is empty, tries to detect from CWD.
+// Unlike the CLI, this never detects from CWD — the MCP server runs as a long-lived process.
 func mcpResolveRepo(repo string) (rootPath, commonDir string, err error) {
-	if repo != "" {
-		regPath, err := registry.DefaultPath()
-		if err != nil {
-			return "", "", err
-		}
-		reg, err := registry.Load(regPath)
-		if err != nil {
-			return "", "", fmt.Errorf("loading registry: %w", err)
-		}
-		r := reg.Find(repo)
-		if r == nil {
-			return "", "", fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", repo)
-		}
-		rootPath, err = git.RootWorktreePath(r.Path)
-		if err != nil {
-			rootPath = r.Path
-		}
-		commonDir, err = git.CommonDir(r.Path)
-		if err != nil {
-			return "", "", fmt.Errorf("finding git common dir: %w", err)
-		}
-		return rootPath, commonDir, nil
+	if repo == "" {
+		return "", "", fmt.Errorf("repo parameter is required")
 	}
-
-	cwd, err := os.Getwd()
+	regPath, err := registry.DefaultPath()
 	if err != nil {
 		return "", "", err
 	}
-	commonDir, err = git.CommonDir(cwd)
+	reg, err := registry.Load(regPath)
 	if err != nil {
-		return "", "", fmt.Errorf("not inside a git repository (specify the repo parameter)")
+		return "", "", fmt.Errorf("loading registry: %w", err)
 	}
-	rootPath, err = git.RootWorktreePath(cwd)
+	r := reg.Find(repo)
+	if r == nil {
+		return "", "", fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", repo)
+	}
+	rootPath, err = git.RootWorktreePath(r.Path)
 	if err != nil {
-		return "", "", fmt.Errorf("finding root worktree: %w", err)
+		rootPath = r.Path
+	}
+	commonDir, err = git.CommonDir(r.Path)
+	if err != nil {
+		return "", "", fmt.Errorf("finding git common dir: %w", err)
 	}
 	return rootPath, commonDir, nil
 }
@@ -129,6 +116,7 @@ func registerMCPTools(s *server.MCPServer) {
 			mcp.WithString("repo", mcp.Description("Target repo name from registry")),
 			mcp.WithBoolean("no_setup", mcp.Description("Skip running the setup script")),
 			mcp.WithBoolean("if_not_exists", mcp.Description("Succeed silently if workspace already exists")),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
 		),
 		handleWorkspaceCreate,
@@ -197,6 +185,7 @@ func registerMCPTools(s *server.MCPServer) {
 			mcp.WithString("old_name", mcp.Description("Current workspace name"), mcp.Required()),
 			mcp.WithString("new_name", mcp.Description("New workspace name"), mcp.Required()),
 			mcp.WithString("repo", mcp.Description("Repo name")),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
 		),
 		handleWorkspaceRename,
@@ -223,13 +212,13 @@ func registerMCPTools(s *server.MCPServer) {
 	)
 
 	s.AddTool(
-		mcp.NewTool("config_validate",
-			mcp.WithDescription("Validate fr8 configuration for a repo."),
+		mcp.NewTool("config_doctor",
+			mcp.WithDescription("Check fr8 configuration health for a repo. Reports errors, warnings, and fixable issues."),
 			mcp.WithString("repo", mcp.Description("Repo name")),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 		),
-		handleConfigValidate,
+		handleConfigDoctor,
 	)
 }
 
@@ -547,15 +536,14 @@ func handleWorkspaceStop(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 
 	sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
 	if !tmux.IsRunning(sessionName) {
-		action := "not_running"
 		if !ifRunning {
-			action = "not_running"
+			return mcpError(fmt.Sprintf("workspace %q is not running", ws.Name))
 		}
 		return mcpResult(struct {
 			Action    string `json:"action"`
 			Workspace string `json:"workspace"`
 			Session   string `json:"session"`
-		}{Action: action, Workspace: ws.Name, Session: sessionName})
+		}{Action: "already_stopped", Workspace: ws.Name, Session: sessionName})
 	}
 
 	if err := tmux.Stop(sessionName); err != nil {
@@ -722,16 +710,16 @@ func handleConfigShow(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 			"run":     cfg.Scripts.Run,
 			"archive": cfg.Scripts.Archive,
 		},
-		"portRange":            cfg.PortRange,
-		"basePort":             cfg.BasePort,
-		"worktreePath":         cfg.WorktreePath,
-		"resolvedWorktreePath": config.ResolveWorktreePath(cfg, rootPath),
+		"port_range":             cfg.PortRange,
+		"base_port":              cfg.BasePort,
+		"worktree_path":          cfg.WorktreePath,
+		"resolved_worktree_path": config.ResolveWorktreePath(cfg, rootPath),
 	}
 
 	return mcpResult(resolved)
 }
 
-func handleConfigValidate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func handleConfigDoctor(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	repo := req.GetString("repo", "")
 	rootPath, _, err := mcpResolveRepo(repo)
 	if err != nil {
@@ -765,18 +753,18 @@ func handleConfigValidate(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	wtPath := config.ResolveWorktreePath(cfg, rootPath)
 	if info, err := os.Stat(wtPath); err == nil {
 		if !info.IsDir() {
-			configErrors = append(configErrors, fmt.Sprintf("worktreePath: %q exists but is not a directory", wtPath))
+			configErrors = append(configErrors, fmt.Sprintf("worktree_path: %q exists but is not a directory", wtPath))
 		}
 	}
 
 	if cfg.BasePort < 1024 {
-		warnings = append(warnings, fmt.Sprintf("basePort: %d is a privileged port (< 1024)", cfg.BasePort))
+		warnings = append(warnings, fmt.Sprintf("base_port: %d is a privileged port (< 1024)", cfg.BasePort))
 	}
 	if cfg.BasePort > 65535 {
-		configErrors = append(configErrors, fmt.Sprintf("basePort: %d is out of range (> 65535)", cfg.BasePort))
+		configErrors = append(configErrors, fmt.Sprintf("base_port: %d is out of range (> 65535)", cfg.BasePort))
 	}
 	if cfg.PortRange < 1 {
-		configErrors = append(configErrors, fmt.Sprintf("portRange: %d must be at least 1", cfg.PortRange))
+		configErrors = append(configErrors, fmt.Sprintf("port_range: %d must be at least 1", cfg.PortRange))
 	}
 
 	if configErrors == nil {

@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(go:*)",
+      "Bash(bin/ci)",
       "Bash(git log:*)",
       "Bash(git diff:*)",
       "Bash(git show:*)",
