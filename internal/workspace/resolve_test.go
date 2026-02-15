@@ -3,18 +3,20 @@ package workspace
 import (
 	"testing"
 
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/registry"
 )
 
 func TestResolveByName(t *testing.T) {
-	st := &state.State{
-		Workspaces: []state.Workspace{
+	repo := &registry.Repo{
+		Name: "test",
+		Path: "/tmp/repo",
+		Workspaces: []registry.Workspace{
 			{Name: "alpha", Path: "/tmp/alpha"},
 			{Name: "beta", Path: "/tmp/beta"},
 		},
 	}
 
-	ws, err := Resolve("beta", st)
+	ws, err := Resolve("beta", repo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,9 +26,9 @@ func TestResolveByName(t *testing.T) {
 }
 
 func TestResolveByNameNotFound(t *testing.T) {
-	st := &state.State{}
+	repo := &registry.Repo{Name: "test", Path: "/tmp/repo"}
 
-	_, err := Resolve("nonexistent", st)
+	_, err := Resolve("nonexistent", repo)
 	if err == nil {
 		t.Fatal("expected error for nonexistent workspace")
 	}

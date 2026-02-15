@@ -40,7 +40,7 @@ func runAttach(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 
-	ws, rootPath, _, err := resolveWorkspace(name)
+	ws, rootPath, err := resolveWorkspace(name)
 	if err != nil {
 		return err
 	}

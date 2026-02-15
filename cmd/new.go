@@ -18,7 +18,6 @@ import (
 	"github.com/protocollar/fr8/internal/names"
 	"github.com/protocollar/fr8/internal/port"
 	"github.com/protocollar/fr8/internal/registry"
-	"github.com/protocollar/fr8/internal/state"
 )
 
 var newBranch string
@@ -56,7 +55,7 @@ var newCmd = &cobra.Command{
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
-	var rootPath, commonDir string
+	var rootPath string
 
 	if resolveRepo != "" {
 		// Resolve from registry
@@ -73,10 +72,6 @@ func runNew(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", resolveRepo)
 		}
 		rootPath = repo.Path
-		commonDir, err = git.CommonDir(rootPath)
-		if err != nil {
-			return fmt.Errorf("finding git common dir: %w", err)
-		}
 	} else {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -90,11 +85,6 @@ func runNew(cmd *cobra.Command, args []string) error {
 		rootPath, err = git.RootWorktreePath(cwd)
 		if err != nil {
 			return fmt.Errorf("finding root worktree: %w", err)
-		}
-
-		commonDir, err = git.CommonDir(cwd)
-		if err != nil {
-			return fmt.Errorf("finding git common dir: %w", err)
 		}
 	}
 
@@ -118,7 +108,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 	// When --json, never enter a subshell
 	enterShell := !noShell && !jsonout.Enabled
 
-	ws, err := createWorkspace(rootPath, commonDir, nameFromArgs(args), branch, trackRemote, !noSetup, enterShell)
+	ws, err := createWorkspace(rootPath, nameFromArgs(args), branch, trackRemote, !noSetup, enterShell)
 	if err != nil {
 		return err
 	}
@@ -155,25 +145,40 @@ func resolvePRBranch(dir, prNumber string) (string, error) {
 // createWorkspace is the shared workspace creation logic used by both the CLI
 // (runNew) and the TUI dashboard loop. When trackRemote is true, the branch is
 // expected to exist on origin and a local tracking branch will be created.
-func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, runSetup, enterShell bool) (*state.Workspace, error) {
+func createWorkspace(rootPath, wsName, branch string, trackRemote, runSetup, enterShell bool) (*registry.Workspace, error) {
 	cfg, err := config.Load(rootPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
-	st, err := state.Load(commonDir)
+	// Load registry for workspace state
+	regPath, err := registry.DefaultPath()
 	if err != nil {
-		return nil, fmt.Errorf("loading state: %w", err)
+		return nil, fmt.Errorf("finding state path: %w", err)
+	}
+	reg, err := registry.Load(regPath)
+	if err != nil {
+		return nil, fmt.Errorf("loading registry: %w", err)
+	}
+
+	repo := reg.FindByPath(rootPath)
+	if repo == nil {
+		// Auto-register the repo
+		newRepo := registry.Repo{Name: filepath.Base(rootPath), Path: rootPath}
+		if err := reg.Add(newRepo); err != nil {
+			return nil, fmt.Errorf("registering repo: %w", err)
+		}
+		repo = reg.FindByPath(rootPath)
 	}
 
 	// Workspace name
 	if wsName != "" {
-		if existing := st.Find(wsName); existing != nil {
+		if existing := repo.FindWorkspace(wsName); existing != nil {
 			if newIfNotExists {
 				if jsonout.Enabled {
 					return existing, jsonout.Write(struct {
-						Action    string           `json:"action"`
-						Workspace *state.Workspace `json:"workspace"`
+						Action    string              `json:"action"`
+						Workspace *registry.Workspace `json:"workspace"`
 					}{Action: "already_exists", Workspace: existing})
 				}
 				_, _ = fmt.Fprintf(jsonout.MsgOut(), "Workspace %q already exists.\n", wsName)
@@ -182,7 +187,7 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 			return nil, fmt.Errorf("workspace %q already exists", wsName)
 		}
 	} else {
-		wsName = names.Generate(st.Names())
+		wsName = names.Generate(repo.WorkspaceNames())
 	}
 
 	// Determine default branch and fetch latest from origin
@@ -229,9 +234,7 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 	}
 
 	// Port — collect ports from all registered repos to avoid cross-repo conflicts
-	globalPorts := allAllocatedPorts()
-	localPorts := st.AllocatedPorts()
-	allocatedPort, err := port.Allocate(mergePorts(globalPorts, localPorts), cfg.BasePort, cfg.PortRange)
+	allocatedPort, err := port.Allocate(reg.AllAllocatedPorts(), cfg.BasePort, cfg.PortRange)
 	if err != nil {
 		return nil, fmt.Errorf("allocating port: %w", err)
 	}
@@ -242,7 +245,7 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 
 	// Dry run: report what would be created without doing it
 	if newDryRun {
-		planned := state.Workspace{
+		planned := registry.Workspace{
 			Name:      wsName,
 			Path:      wsPath,
 			Port:      allocatedPort,
@@ -282,25 +285,22 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 		return nil, fmt.Errorf("creating worktree: %w", err)
 	}
 
-	ws := state.Workspace{
+	ws := registry.Workspace{
 		Name:      wsName,
 		Path:      wsPath,
 		Port:      allocatedPort,
 		CreatedAt: time.Now().UTC(),
 	}
 
-	if err := st.Add(ws); err != nil {
+	if err := repo.AddWorkspace(ws); err != nil {
 		// Clean up worktree on state failure
 		_ = git.WorktreeRemove(rootPath, wsPath)
 		return nil, fmt.Errorf("saving workspace: %w", err)
 	}
-	if err := st.Save(commonDir); err != nil {
+	if err := reg.Save(regPath); err != nil {
 		_ = git.WorktreeRemove(rootPath, wsPath)
 		return nil, fmt.Errorf("saving state: %w", err)
 	}
-
-	// Auto-register repo in global registry
-	autoRegisterRepo(rootPath)
 
 	// Sync files
 	_, _ = fmt.Fprintf(jsonout.MsgOut(), "Syncing files...\n")
@@ -376,49 +376,6 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 	}
 
 	return &ws, nil
-}
-
-// allAllocatedPorts collects every allocated port across all repos in the
-// global registry. Failures are silently skipped so this never blocks
-// workspace creation.
-func allAllocatedPorts() []int {
-	regPath, err := registry.DefaultPath()
-	if err != nil {
-		return nil
-	}
-	reg, err := registry.Load(regPath)
-	if err != nil {
-		return nil
-	}
-	var ports []int
-	for _, repo := range reg.Repos {
-		commonDir, err := git.CommonDir(repo.Path)
-		if err != nil {
-			continue
-		}
-		st, err := state.Load(commonDir)
-		if err != nil {
-			continue
-		}
-		ports = append(ports, st.AllocatedPorts()...)
-	}
-	return ports
-}
-
-// mergePorts returns the union of two port slices, deduplicating entries from b
-// that already appear in a.
-func mergePorts(a, b []int) []int {
-	seen := make(map[int]bool, len(a))
-	for _, p := range a {
-		seen[p] = true
-	}
-	merged := append([]int{}, a...)
-	for _, p := range b {
-		if !seen[p] {
-			merged = append(merged, p)
-		}
-	}
-	return merged
 }
 
 func shortenHomePath(p string) string {

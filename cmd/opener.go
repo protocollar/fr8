@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/protocollar/fr8/internal/jsonout"
-	"github.com/protocollar/fr8/internal/opener"
+	"github.com/protocollar/fr8/internal/userconfig"
 )
 
 func init() {
@@ -67,32 +67,40 @@ var openerRemoveCmd = &cobra.Command{
 	RunE:              runOpenerRemove,
 }
 
+func loadUserConfig() (*userconfig.Config, string, error) {
+	path, err := userconfig.DefaultPath()
+	if err != nil {
+		return nil, "", err
+	}
+	cfg, err := userconfig.Load(path)
+	if err != nil {
+		return nil, "", fmt.Errorf("loading config: %w", err)
+	}
+	return cfg, path, nil
+}
+
 func runOpenerList(cmd *cobra.Command, args []string) error {
-	path, err := opener.DefaultPath()
+	cfg, _, err := loadUserConfig()
 	if err != nil {
 		return err
 	}
 
-	openers, err := opener.Load(path)
-	if err != nil {
-		return fmt.Errorf("loading openers: %w", err)
-	}
-
 	if jsonout.Enabled {
+		openers := cfg.Openers
 		if openers == nil {
-			openers = []opener.Opener{}
+			openers = []userconfig.Opener{}
 		}
 		return jsonout.Write(openers)
 	}
 
-	if len(openers) == 0 {
+	if len(cfg.Openers) == 0 {
 		fmt.Println("No openers configured. Add one with: fr8 opener add <name> [command...]")
 		return nil
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "NAME\tCOMMAND\tDEFAULT")
-	for _, o := range openers {
+	for _, o := range cfg.Openers {
 		def := ""
 		if o.Default {
 			def = "(default)"
@@ -110,31 +118,24 @@ func runOpenerAdd(cmd *cobra.Command, args []string) error {
 		command = strings.Join(args[1:], " ")
 	}
 
-	path, err := opener.DefaultPath()
+	cfg, path, err := loadUserConfig()
 	if err != nil {
 		return err
 	}
 
-	openers, err := opener.Load(path)
-	if err != nil {
-		return fmt.Errorf("loading openers: %w", err)
+	o := userconfig.Opener{Name: name, Command: command}
+	if err := cfg.AddOpener(o); err != nil {
+		return err
 	}
 
-	if opener.Find(openers, name) != nil {
-		return fmt.Errorf("opener %q already exists (remove it first with: fr8 opener remove %s)", name, name)
-	}
-
-	o := opener.Opener{Name: name, Command: command}
-	openers = append(openers, o)
-
-	if err := opener.Save(path, openers); err != nil {
-		return fmt.Errorf("saving openers: %w", err)
+	if err := cfg.Save(path); err != nil {
+		return fmt.Errorf("saving config: %w", err)
 	}
 
 	if jsonout.Enabled {
 		return jsonout.Write(struct {
-			Action string        `json:"action"`
-			Opener opener.Opener `json:"opener"`
+			Action string          `json:"action"`
+			Opener userconfig.Opener `json:"opener"`
 		}{Action: "added", Opener: o})
 	}
 
@@ -152,22 +153,17 @@ func runOpenerAdd(cmd *cobra.Command, args []string) error {
 func runOpenerSetDefault(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	path, err := opener.DefaultPath()
+	cfg, path, err := loadUserConfig()
 	if err != nil {
 		return err
 	}
 
-	openers, err := opener.Load(path)
-	if err != nil {
-		return fmt.Errorf("loading openers: %w", err)
-	}
-
-	if err := opener.SetDefault(openers, name); err != nil {
+	if err := cfg.SetDefaultOpener(name); err != nil {
 		return err
 	}
 
-	if err := opener.Save(path, openers); err != nil {
-		return fmt.Errorf("saving openers: %w", err)
+	if err := cfg.Save(path); err != nil {
+		return fmt.Errorf("saving config: %w", err)
 	}
 
 	if jsonout.Enabled {
@@ -184,31 +180,17 @@ func runOpenerSetDefault(cmd *cobra.Command, args []string) error {
 func runOpenerRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	path, err := opener.DefaultPath()
+	cfg, path, err := loadUserConfig()
 	if err != nil {
 		return err
 	}
 
-	openers, err := opener.Load(path)
-	if err != nil {
-		return fmt.Errorf("loading openers: %w", err)
+	if err := cfg.RemoveOpener(name); err != nil {
+		return err
 	}
 
-	found := false
-	for i, o := range openers {
-		if o.Name == name {
-			openers = append(openers[:i], openers[i+1:]...)
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("opener %q not found", name)
-	}
-
-	if err := opener.Save(path, openers); err != nil {
-		return fmt.Errorf("saving openers: %w", err)
+	if err := cfg.Save(path); err != nil {
+		return fmt.Errorf("saving config: %w", err)
 	}
 
 	if jsonout.Enabled {
@@ -227,19 +209,10 @@ func openerNameCompletion(cmd *cobra.Command, args []string, toComplete string) 
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	path, err := opener.DefaultPath()
+	cfg, _, err := loadUserConfig()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	openers, err := opener.Load(path)
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	names := make([]string, len(openers))
-	for i, o := range openers {
-		names[i] = o.Name
-	}
-	return names, cobra.ShellCompDirectiveNoFileComp
+	return cfg.OpenerNames(), cobra.ShellCompDirectiveNoFileComp
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/protocollar/fr8/internal/gh"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/registry"
-	"github.com/protocollar/fr8/internal/state"
 	"github.com/protocollar/fr8/internal/tmux"
 	"github.com/protocollar/fr8/internal/workspace"
 )
@@ -43,43 +42,47 @@ func mcpError(msg string) (*mcp.CallToolResult, error) {
 // mcpResolveWorkspace resolves a workspace by name with optional repo filter.
 // Unlike the CLI's resolveWorkspace(), this never detects from CWD — it always
 // uses the global registry for lookup, since the MCP server runs as a long-lived process.
-func mcpResolveWorkspace(name, repo string) (*state.Workspace, string, string, error) {
+func mcpResolveWorkspace(name, repo string) (*registry.Workspace, string, error) {
 	if name == "" {
-		return nil, "", "", fmt.Errorf("workspace name is required")
+		return nil, "", fmt.Errorf("workspace name is required")
 	}
 	if repo != "" {
-		return workspace.ResolveFromRepo(name, repo)
+		ws, _, rootPath, err := workspace.ResolveFromRepo(name, repo)
+		if err != nil {
+			return nil, "", err
+		}
+		return ws, rootPath, nil
 	}
-	return workspace.ResolveGlobal(name)
+	ws, _, rootPath, err := workspace.ResolveGlobal(name)
+	if err != nil {
+		return nil, "", err
+	}
+	return ws, rootPath, nil
 }
 
-// mcpResolveRepo resolves a repo's root path and git common dir from a repo name.
+// mcpResolveRepo resolves a repo's root path from a repo name.
 // Unlike the CLI, this never detects from CWD — the MCP server runs as a long-lived process.
-func mcpResolveRepo(repo string) (rootPath, commonDir string, err error) {
+func mcpResolveRepo(repo string) (rootPath string, err error) {
 	if repo == "" {
-		return "", "", fmt.Errorf("repo parameter is required")
+		return "", fmt.Errorf("repo parameter is required")
 	}
 	regPath, err := registry.DefaultPath()
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	reg, err := registry.Load(regPath)
 	if err != nil {
-		return "", "", fmt.Errorf("loading registry: %w", err)
+		return "", fmt.Errorf("loading registry: %w", err)
 	}
 	r := reg.Find(repo)
 	if r == nil {
-		return "", "", fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", repo)
+		return "", fmt.Errorf("repo %q not found in registry (see: fr8 repo list)", repo)
 	}
 	rootPath, err = git.RootWorktreePath(r.Path)
 	if err != nil {
 		rootPath = r.Path
 	}
-	commonDir, err = git.CommonDir(r.Path)
-	if err != nil {
-		return "", "", fmt.Errorf("finding git common dir: %w", err)
-	}
-	return rootPath, commonDir, nil
+	return rootPath, nil
 }
 
 func registerMCPTools(s *server.MCPServer) {
@@ -253,18 +256,10 @@ func handleWorkspaceList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 		if repo != "" && r.Name != repo {
 			continue
 		}
-		commonDir, err := git.CommonDir(r.Path)
-		if err != nil {
-			continue
-		}
-		st, err := state.Load(commonDir)
-		if err != nil {
-			continue
-		}
 		rootPath, _ := git.RootWorktreePath(r.Path)
 		defaultBranch, _ := git.DefaultBranch(rootPath)
 
-		for _, ws := range st.Workspaces {
+		for _, ws := range r.Workspaces {
 			running := false
 			if hasTmux {
 				sessionName := tmux.SessionName(r.Name, ws.Name)
@@ -313,7 +308,7 @@ func handleWorkspaceStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	name := req.GetString("name", "")
 	repo := req.GetString("repo", "")
 
-	ws, rootPath, _, err := mcpResolveWorkspace(name, repo)
+	ws, rootPath, err := mcpResolveWorkspace(name, repo)
 	if err != nil {
 		return mcpError(err.Error())
 	}
@@ -375,7 +370,7 @@ func handleWorkspaceCreate(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	noSetup := req.GetBool("no_setup", false)
 	ifNotExists := req.GetBool("if_not_exists", false)
 
-	rootPath, commonDir, err := mcpResolveRepo(repo)
+	rootPath, err := mcpResolveRepo(repo)
 	if err != nil {
 		return mcpError(err.Error())
 	}
@@ -396,25 +391,31 @@ func handleWorkspaceCreate(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 
 	// Handle if_not_exists before calling createWorkspace (avoids global flag dependency)
 	if ifNotExists && wsName != "" {
-		st, err := state.Load(commonDir)
+		regPath, err := registry.DefaultPath()
 		if err == nil {
-			if existing := st.Find(wsName); existing != nil {
-				return mcpResult(struct {
-					Action    string           `json:"action"`
-					Workspace *state.Workspace `json:"workspace"`
-				}{Action: "already_exists", Workspace: existing})
+			reg, err := registry.Load(regPath)
+			if err == nil {
+				r := reg.FindByPath(rootPath)
+				if r != nil {
+					if existing := r.FindWorkspace(wsName); existing != nil {
+						return mcpResult(struct {
+							Action    string              `json:"action"`
+							Workspace *registry.Workspace `json:"workspace"`
+						}{Action: "already_exists", Workspace: existing})
+					}
+				}
 			}
 		}
 	}
 
-	ws, err := createWorkspace(rootPath, commonDir, wsName, branch, trackRemote, !noSetup, false)
+	ws, err := createWorkspace(rootPath, wsName, branch, trackRemote, !noSetup, false)
 	if err != nil {
 		return mcpError(err.Error())
 	}
 
 	return mcpResult(struct {
-		Action    string           `json:"action"`
-		Workspace *state.Workspace `json:"workspace"`
+		Action    string              `json:"action"`
+		Workspace *registry.Workspace `json:"workspace"`
 	}{Action: "created", Workspace: ws})
 }
 
@@ -424,7 +425,7 @@ func handleWorkspaceArchive(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	force := req.GetBool("force", false)
 	ifExists := req.GetBool("if_exists", false)
 
-	ws, rootPath, commonDir, err := mcpResolveWorkspace(name, repo)
+	ws, rootPath, err := mcpResolveWorkspace(name, repo)
 	if err != nil {
 		if ifExists {
 			return mcpResult(struct {
@@ -437,11 +438,6 @@ func handleWorkspaceArchive(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	cfg, err := config.Load(rootPath)
 	if err != nil {
 		return mcpError(fmt.Sprintf("loading config: %v", err))
-	}
-
-	st, err := state.Load(commonDir)
-	if err != nil {
-		return mcpError(fmt.Sprintf("loading state: %v", err))
 	}
 
 	// Capture branch before worktree removal
@@ -473,10 +469,21 @@ func handleWorkspaceArchive(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	// Remove worktree
 	_ = git.WorktreeRemove(rootPath, ws.Path)
 
-	// Update state
-	_ = st.Remove(ws.Name)
-	if err := st.Save(commonDir); err != nil {
-		return mcpError(fmt.Sprintf("saving state: %v", err))
+	// Update state via registry
+	regPath, err := registry.DefaultPath()
+	if err != nil {
+		return mcpError(fmt.Sprintf("finding state path: %v", err))
+	}
+	reg, err := registry.Load(regPath)
+	if err != nil {
+		return mcpError(fmt.Sprintf("loading registry: %v", err))
+	}
+	r := reg.FindByPath(rootPath)
+	if r != nil {
+		_ = r.RemoveWorkspace(ws.Name)
+		if err := reg.Save(regPath); err != nil {
+			return mcpError(fmt.Sprintf("saving state: %v", err))
+		}
 	}
 
 	return mcpResult(struct {
@@ -507,7 +514,7 @@ func handleWorkspaceRun(ctx context.Context, req mcp.CallToolRequest) (*mcp.Call
 		return mcpError(err.Error())
 	}
 
-	ws, rootPath, _, err := mcpResolveWorkspace(name, repo)
+	ws, rootPath, err := mcpResolveWorkspace(name, repo)
 	if err != nil {
 		return mcpError(err.Error())
 	}
@@ -555,7 +562,7 @@ func handleWorkspaceStop(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 		return mcpError(err.Error())
 	}
 
-	ws, rootPath, _, err := mcpResolveWorkspace(name, repo)
+	ws, rootPath, err := mcpResolveWorkspace(name, repo)
 	if err != nil {
 		return mcpError(err.Error())
 	}
@@ -587,7 +594,7 @@ func handleWorkspaceEnv(ctx context.Context, req mcp.CallToolRequest) (*mcp.Call
 	name := req.GetString("name", "")
 	repo := req.GetString("repo", "")
 
-	ws, rootPath, _, err := mcpResolveWorkspace(name, repo)
+	ws, rootPath, err := mcpResolveWorkspace(name, repo)
 	if err != nil {
 		return mcpError(err.Error())
 	}
@@ -615,7 +622,7 @@ func handleWorkspaceLogs(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 		return mcpError(err.Error())
 	}
 
-	ws, rootPath, _, err := mcpResolveWorkspace(name, repo)
+	ws, rootPath, err := mcpResolveWorkspace(name, repo)
 	if err != nil {
 		return mcpError(err.Error())
 	}
@@ -642,14 +649,9 @@ func handleWorkspaceRename(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		return mcpError("both old_name and new_name are required")
 	}
 
-	ws, rootPath, commonDir, err := mcpResolveWorkspace(oldName, repo)
+	ws, rootPath, err := mcpResolveWorkspace(oldName, repo)
 	if err != nil {
 		return mcpError(err.Error())
-	}
-
-	st, err := state.Load(commonDir)
-	if err != nil {
-		return mcpError(fmt.Sprintf("loading state: %v", err))
 	}
 
 	oldPath := ws.Path
@@ -658,13 +660,26 @@ func handleWorkspaceRename(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		return mcpError(fmt.Sprintf("moving worktree: %v", err))
 	}
 
-	if err := st.Rename(oldName, newName); err != nil {
+	// Update state via registry
+	regPath, err := registry.DefaultPath()
+	if err != nil {
+		return mcpError(fmt.Sprintf("finding state path: %v", err))
+	}
+	reg, err := registry.Load(regPath)
+	if err != nil {
+		return mcpError(fmt.Sprintf("loading registry: %v", err))
+	}
+	r := reg.FindByPath(rootPath)
+	if r == nil {
+		return mcpError(fmt.Sprintf("repo not found in registry for path: %s", rootPath))
+	}
+	if err := r.RenameWorkspace(oldName, newName); err != nil {
 		return mcpError(err.Error())
 	}
-	renamed := st.Find(newName)
+	renamed := r.FindWorkspace(newName)
 	renamed.Path = newPath
 
-	if err := st.Save(commonDir); err != nil {
+	if err := reg.Save(regPath); err != nil {
 		return mcpError(fmt.Sprintf("saving state: %v", err))
 	}
 
@@ -699,8 +714,8 @@ func handleRepoList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTool
 	}
 
 	type mcpRepoItem struct {
-		Name       string             `json:"name"`
-		Path       string             `json:"path"`
+		Name       string              `json:"name"`
+		Path       string              `json:"path"`
 		Workspaces []workspaceListItem `json:"workspaces,omitempty"`
 	}
 
@@ -720,7 +735,7 @@ func handleRepoList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTool
 
 func handleConfigShow(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	repo := req.GetString("repo", "")
-	rootPath, _, err := mcpResolveRepo(repo)
+	rootPath, err := mcpResolveRepo(repo)
 	if err != nil {
 		return mcpError(err.Error())
 	}
@@ -747,7 +762,7 @@ func handleConfigShow(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 
 func handleConfigDoctor(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	repo := req.GetString("repo", "")
-	rootPath, _, err := mcpResolveRepo(repo)
+	rootPath, err := mcpResolveRepo(repo)
 	if err != nil {
 		return mcpError(err.Error())
 	}

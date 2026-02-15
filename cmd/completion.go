@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/registry"
-	"github.com/protocollar/fr8/internal/state"
 )
 
 func init() {
@@ -53,45 +52,29 @@ func workspaceNameCompletion(cmd *cobra.Command, args []string, toComplete strin
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	commonDir, err := git.CommonDir(cwd)
+	regPath, err := registry.DefaultPath()
 	if err != nil {
-		// Not inside a git repo — search all registered repos
-		return allRegistryWorkspaceNames(), cobra.ShellCompDirectiveNoFileComp
+		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-
-	st, err := state.Load(commonDir)
+	reg, err := registry.Load(regPath)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	return st.Names(), cobra.ShellCompDirectiveNoFileComp
-}
-
-// allRegistryWorkspaceNames returns workspace names from all registered repos.
-func allRegistryWorkspaceNames() []string {
-	regPath, err := registry.DefaultPath()
-	if err != nil {
-		return nil
-	}
-
-	reg, err := registry.Load(regPath)
-	if err != nil {
-		return nil
-	}
-
-	var names []string
-	for _, repo := range reg.Repos {
-		commonDir, err := git.CommonDir(repo.Path)
-		if err != nil {
-			continue
+	// Try CWD match
+	repo := reg.FindRepoByWorkspacePath(cwd)
+	if repo == nil {
+		if git.IsInsideWorkTree(cwd) {
+			rootPath, err := git.RootWorktreePath(cwd)
+			if err == nil {
+				repo = reg.FindByPath(rootPath)
+			}
 		}
-
-		st, err := state.Load(commonDir)
-		if err != nil {
-			continue
-		}
-
-		names = append(names, st.Names()...)
 	}
-	return names
+	if repo != nil {
+		return repo.WorkspaceNames(), cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Fall back to all registered workspace names
+	return reg.AllWorkspaceNames(), cobra.ShellCompDirectiveNoFileComp
 }

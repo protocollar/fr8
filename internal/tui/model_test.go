@@ -6,9 +6,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/protocollar/fr8/internal/git"
-	"github.com/protocollar/fr8/internal/opener"
 	"github.com/protocollar/fr8/internal/registry"
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/userconfig"
 )
 
 // Key helpers for constructing tea.KeyMsg values.
@@ -33,11 +32,10 @@ func seedWorkspaceModel() model {
 		view:     viewWorkspaceList,
 		repoName: "alpha",
 		rootPath: "/a",
-		commonDir: "/a/.git",
 		workspaces: []workspaceItem{
-			{Workspace: state.Workspace{Name: "ws-one", Port: 3000}, Branch: "feat-1"},
-			{Workspace: state.Workspace{Name: "ws-two", Port: 3010}, Branch: "feat-2"},
-			{Workspace: state.Workspace{Name: "ws-three", Port: 3020}, Branch: "feat-3"},
+			{Workspace: registry.Workspace{Name: "ws-one", Port: 3000}, Branch: "feat-1"},
+			{Workspace: registry.Workspace{Name: "ws-two", Port: 3010}, Branch: "feat-2"},
+			{Workspace: registry.Workspace{Name: "ws-three", Port: 3020}, Branch: "feat-3"},
 		},
 		cursor: 0,
 	}
@@ -329,14 +327,13 @@ func TestWorkspacesLoadedMsg(t *testing.T) {
 	m := model{view: viewRepoList, loading: true}
 
 	workspaces := []workspaceItem{
-		{Workspace: state.Workspace{Name: "ws1", Port: 3000}, Branch: "feat"},
+		{Workspace: registry.Workspace{Name: "ws1", Port: 3000}, Branch: "feat"},
 	}
 
 	m = updateModel(m, workspacesLoadedMsg{
 		workspaces: workspaces,
 		repoName:   "myrepo",
 		rootPath:   "/myrepo",
-		commonDir:  "/myrepo/.git",
 	})
 
 	if m.view != viewWorkspaceList {
@@ -369,16 +366,15 @@ func TestArchiveResultClearsLoading(t *testing.T) {
 
 func TestArchiveLastWorkspaceClearsLoading(t *testing.T) {
 	m := model{
-		view:      viewWorkspaceList,
-		loading:   true,
-		repoName:  "alpha",
-		rootPath:  "/a",
-		commonDir: "/a/.git",
+		view:     viewWorkspaceList,
+		loading:  true,
+		repoName: "alpha",
+		rootPath: "/a",
 		repos: []repoItem{
 			{Repo: registry.Repo{Name: "alpha", Path: "/a"}, WorkspaceCount: 1},
 		},
 		workspaces: []workspaceItem{
-			{Workspace: state.Workspace{Name: "only-ws", Port: 3000}, Branch: "feat-1"},
+			{Workspace: registry.Workspace{Name: "only-ws", Port: 3000}, Branch: "feat-1"},
 		},
 		cursor: 0,
 	}
@@ -748,7 +744,7 @@ func TestOpenersLoadedSingleOpenerQuitsDirectly(t *testing.T) {
 	m.openerWsIdx = 1
 
 	result, cmd := m.Update(openersLoadedMsg{
-		openers: []opener.Opener{{Name: "vscode", Command: "code"}},
+		openers: []userconfig.Opener{{Name: "vscode", Command: "code"}},
 	})
 	m = result.(model)
 
@@ -776,7 +772,7 @@ func TestOpenersLoadedMultipleShowsPicker(t *testing.T) {
 	m.openerWsIdx = 0
 
 	m = updateModel(m, openersLoadedMsg{
-		openers: []opener.Opener{
+		openers: []userconfig.Opener{
 			{Name: "vscode", Command: "code"},
 			{Name: "cursor", Command: "cursor"},
 		},
@@ -831,7 +827,7 @@ func TestOpenerPickerNavigation(t *testing.T) {
 	m := seedWorkspaceModel()
 	m.view = viewOpenerPicker
 	m.openerWsIdx = 0
-	m.openers = []opener.Opener{
+	m.openers = []userconfig.Opener{
 		{Name: "vscode", Command: "code"},
 		{Name: "cursor", Command: "cursor"},
 		{Name: "terminal", Command: "open"},
@@ -866,7 +862,7 @@ func TestOpenerPickerSelectQuitsWithRequest(t *testing.T) {
 	m := seedWorkspaceModel()
 	m.view = viewOpenerPicker
 	m.openerWsIdx = 1
-	m.openers = []opener.Opener{
+	m.openers = []userconfig.Opener{
 		{Name: "vscode", Command: "code"},
 		{Name: "cursor", Command: "cursor"},
 	}
@@ -897,7 +893,7 @@ func TestOpenerPickerEscGoesBack(t *testing.T) {
 	m := seedWorkspaceModel()
 	m.view = viewOpenerPicker
 	m.openerWsIdx = 0
-	m.openers = []opener.Opener{
+	m.openers = []userconfig.Opener{
 		{Name: "vscode", Command: "code"},
 	}
 
@@ -1098,7 +1094,7 @@ func TestOpenersLoadedDefaultOpenerAutoSelect(t *testing.T) {
 	m.openerWsIdx = 1
 
 	result, cmd := m.Update(openersLoadedMsg{
-		openers: []opener.Opener{
+		openers: []userconfig.Opener{
 			{Name: "vscode", Command: "code"},
 			{Name: "cursor", Command: "cursor", Default: true},
 			{Name: "terminal", Command: "open"},
@@ -1135,7 +1131,7 @@ func TestOpenersLoadedNoDefaultShowsPicker(t *testing.T) {
 
 	// Multiple openers, none is default — should show picker
 	m = updateModel(m, openersLoadedMsg{
-		openers: []opener.Opener{
+		openers: []userconfig.Opener{
 			{Name: "vscode", Command: "code"},
 			{Name: "cursor", Command: "cursor"},
 			{Name: "terminal", Command: "open"},

@@ -62,7 +62,7 @@ func TestMcpError(t *testing.T) {
 }
 
 func TestMcpResolveWorkspaceEmptyName(t *testing.T) {
-	_, _, _, err := mcpResolveWorkspace("", "")
+	_, _, err := mcpResolveWorkspace("", "")
 	if err == nil {
 		t.Fatal("expected error for empty name")
 	}
@@ -72,7 +72,7 @@ func TestMcpResolveWorkspaceEmptyName(t *testing.T) {
 }
 
 func TestMcpResolveWorkspaceWithRepoNoName(t *testing.T) {
-	_, _, _, err := mcpResolveWorkspace("", "some-repo")
+	_, _, err := mcpResolveWorkspace("", "some-repo")
 	if err == nil {
 		t.Fatal("expected error for empty name even with repo")
 	}
@@ -82,7 +82,7 @@ func TestMcpResolveWorkspaceWithRepoNoName(t *testing.T) {
 }
 
 func TestMcpResolveRepoRequiresParam(t *testing.T) {
-	_, _, err := mcpResolveRepo("")
+	_, err := mcpResolveRepo("")
 	if err == nil {
 		t.Fatal("expected error for empty repo param")
 	}

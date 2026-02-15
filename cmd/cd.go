@@ -30,7 +30,7 @@ func runCd(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 
-	ws, _, _, err := resolveWorkspace(name)
+	ws, _, err := resolveWorkspace(name)
 	if err != nil {
 		return err
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/protocollar/fr8/internal/exitcode"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/jsonout"
+	"github.com/protocollar/fr8/internal/registry"
 )
 
 var doctorFix bool
@@ -23,7 +24,7 @@ func init() {
 	configCmd.AddCommand(configDoctorCmd)
 	configCmd.AddCommand(configValidateCmd) // alias
 	configCmd.AddCommand(configOpenCmd)
-	rootCmd.AddCommand(configCmd)
+rootCmd.AddCommand(configCmd)
 }
 
 var configCmd = &cobra.Command{
@@ -62,11 +63,7 @@ var configOpenCmd = &cobra.Command{
 
 // configDir returns the fr8 global config directory (~/.config/fr8).
 func configDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("finding home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "fr8"), nil
+	return registry.ConfigDir()
 }
 
 func runConfigOpen(cmd *cobra.Command, args []string) error {

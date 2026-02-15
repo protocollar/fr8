@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/protocollar/fr8/internal/jsonout"
 	"github.com/protocollar/fr8/internal/port"
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/registry"
 )
 
 func init() {
@@ -27,7 +27,7 @@ func runBrowser(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 
-	ws, _, _, err := resolveWorkspace(name)
+	ws, _, err := resolveWorkspace(name)
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func runBrowser(cmd *cobra.Command, args []string) error {
 	return openWorkspaceBrowser(ws)
 }
 
-func openWorkspaceBrowser(ws *state.Workspace) error {
+func openWorkspaceBrowser(ws *registry.Workspace) error {
 	listening := !port.IsFree(ws.Port)
 	url := fmt.Sprintf("http://localhost:%d", ws.Port)
 

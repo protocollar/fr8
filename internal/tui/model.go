@@ -15,11 +15,10 @@ import (
 	"github.com/protocollar/fr8/internal/env"
 	"github.com/protocollar/fr8/internal/gh"
 	"github.com/protocollar/fr8/internal/git"
-	"github.com/protocollar/fr8/internal/opener"
 	"github.com/protocollar/fr8/internal/port"
 	"github.com/protocollar/fr8/internal/registry"
-	"github.com/protocollar/fr8/internal/state"
 	"github.com/protocollar/fr8/internal/tmux"
+	"github.com/protocollar/fr8/internal/userconfig"
 )
 
 type model struct {
@@ -32,7 +31,6 @@ type model struct {
 	err               error
 	repoName          string // current repo being viewed
 	rootPath          string // root worktree path for current repo
-	commonDir         string // git common dir for current repo
 	defaultBranch     string // default branch for current repo
 	shellRequest      *shellRequestMsg
 	attachRequest     *attachRequestMsg
@@ -40,7 +38,7 @@ type model struct {
 	createRequest     *createRequestMsg
 	archiveIdx        int // workspace index pending archive confirmation
 	batchArchiveNames []string
-	openers           []opener.Opener
+	openers           []userconfig.Opener
 	openerCursor      int
 	openerWsIdx       int // workspace index for which opener picker was opened
 	createInput       textinput.Model
@@ -104,7 +102,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workspaces = msg.workspaces
 		m.repoName = msg.repoName
 		m.rootPath = msg.rootPath
-		m.commonDir = msg.commonDir
 		m.defaultBranch = msg.defaultBranch
 		m.cursor = 0
 		m.view = viewWorkspaceList
@@ -252,7 +249,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		// Check for default opener
-		if d := opener.FindDefault(msg.openers); d != nil {
+		if d := findDefaultOpener(msg.openers); d != nil {
 			ws := m.workspaces[m.openerWsIdx]
 			m.openRequest = &openRequestMsg{
 				workspace:  ws.Workspace,
@@ -407,7 +404,7 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.loading = true
 			m.err = nil
-			return m, tea.Batch(startWorkspaceCmd(ws.Workspace, m.rootPath, m.commonDir), m.spinner.Tick)
+			return m, tea.Batch(startWorkspaceCmd(ws.Workspace, m.rootPath), m.spinner.Tick)
 		}
 	case key.Matches(msg, keys.Browser):
 		if len(m.workspaces) > 0 {
@@ -492,7 +489,7 @@ func (m model) handleConfirmBatchArchiveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 	case key.Matches(msg, keys.Yes):
 		m.loading = true
 		m.view = viewWorkspaceList
-		return m, tea.Batch(batchArchiveCmd(m.batchArchiveNames, m.rootPath, m.commonDir), m.spinner.Tick)
+		return m, tea.Batch(batchArchiveCmd(m.batchArchiveNames, m.rootPath), m.spinner.Tick)
 	case key.Matches(msg, keys.No):
 		m.batchArchiveNames = nil
 		m.view = viewWorkspaceList
@@ -509,9 +506,8 @@ func (m model) handleCreateWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		name := strings.TrimSpace(m.createInput.Value())
 		m.createRequest = &createRequestMsg{
-			name:      name,
-			rootPath:  m.rootPath,
-			commonDir: m.commonDir,
+			name:     name,
+			rootPath: m.rootPath,
 		}
 		return m, tea.Quit
 	}
@@ -527,7 +523,7 @@ func (m model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		ws := m.workspaces[m.archiveIdx]
 		m.loading = true
 		m.view = viewWorkspaceList
-		return m, tea.Batch(archiveWorkspaceCmd(ws.Workspace, m.rootPath, m.commonDir), m.spinner.Tick)
+		return m, tea.Batch(archiveWorkspaceCmd(ws.Workspace, m.rootPath), m.spinner.Tick)
 	case key.Matches(msg, keys.No):
 		m.view = viewWorkspaceList
 	}
@@ -574,18 +570,7 @@ func loadReposCmd() tea.Msg {
 
 	items := make([]repoItem, len(reg.Repos))
 	for i, repo := range reg.Repos {
-		items[i] = repoItem{Repo: repo}
-		commonDir, err := git.CommonDir(repo.Path)
-		if err != nil {
-			items[i].Err = err
-			continue
-		}
-		st, err := state.Load(commonDir)
-		if err != nil {
-			items[i].Err = err
-			continue
-		}
-		items[i].WorkspaceCount = len(st.Workspaces)
+		items[i] = repoItem{Repo: repo, WorkspaceCount: len(repo.Workspaces)}
 	}
 
 	// Enrich with running counts from tmux sessions.
@@ -605,19 +590,9 @@ func loadReposCmd() tea.Msg {
 
 func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 	return func() tea.Msg {
-		commonDir, err := git.CommonDir(repo.Path)
-		if err != nil {
-			return workspacesLoadedMsg{err: fmt.Errorf("reading git data for %s: %w", repo.Name, err)}
-		}
-
 		rootPath, err := git.RootWorktreePath(repo.Path)
 		if err != nil {
 			return workspacesLoadedMsg{err: fmt.Errorf("finding root worktree: %w", err)}
-		}
-
-		st, err := state.Load(commonDir)
-		if err != nil {
-			return workspacesLoadedMsg{err: fmt.Errorf("loading state for %s: %w", repo.Name, err)}
 		}
 
 		defaultBranch, _ := git.DefaultBranch(rootPath)
@@ -634,16 +609,16 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 			}
 		}
 
-		items := make([]workspaceItem, len(st.Workspaces))
+		items := make([]workspaceItem, len(repo.Workspaces))
 
 		// Fan out git enrichment per workspace in parallel
 		type enrichResult struct {
 			idx  int
 			item workspaceItem
 		}
-		gitCh := make(chan enrichResult, len(st.Workspaces))
-		for i, ws := range st.Workspaces {
-			go func(idx int, ws state.Workspace) {
+		gitCh := make(chan enrichResult, len(repo.Workspaces))
+		for i, ws := range repo.Workspaces {
+			go func(idx int, ws registry.Workspace) {
 				branch, _ := git.CurrentBranch(ws.Path)
 				item := workspaceItem{Workspace: ws, Branch: branch}
 				item.PortFree = port.IsFree(ws.Port)
@@ -691,7 +666,7 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 				gitCh <- enrichResult{idx: idx, item: item}
 			}(i, ws)
 		}
-		for range st.Workspaces {
+		for range repo.Workspaces {
 			res := <-gitCh
 			items[res.idx] = res.item
 		}
@@ -704,7 +679,7 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 			}
 			ch := make(chan prResult, len(items))
 			for i, item := range items {
-				go func(idx int, branch string, ws state.Workspace) {
+				go func(idx int, branch string, ws registry.Workspace) {
 					pr, _ := gh.PRStatus(ws.Path, branch)
 					ch <- prResult{idx: idx, pr: pr}
 				}(i, item.Branch, item.Workspace)
@@ -719,13 +694,12 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 			workspaces:    items,
 			repoName:      repo.Name,
 			rootPath:      rootPath,
-			commonDir:     commonDir,
 			defaultBranch: defaultBranch,
 		}
 	}
 }
 
-func startWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd {
+func startWorkspaceCmd(ws registry.Workspace, rootPath string) tea.Cmd {
 	return func() tea.Msg {
 		if err := tmux.Available(); err != nil {
 			return startResultMsg{name: ws.Name, err: err}
@@ -753,7 +727,7 @@ func startWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd {
 	}
 }
 
-func stopWorkspaceCmd(ws state.Workspace, rootPath string) tea.Cmd {
+func stopWorkspaceCmd(ws registry.Workspace, rootPath string) tea.Cmd {
 	return func() tea.Msg {
 		if err := tmux.Available(); err != nil {
 			return stopResultMsg{name: ws.Name, err: err}
@@ -769,7 +743,7 @@ func stopWorkspaceCmd(ws state.Workspace, rootPath string) tea.Cmd {
 	}
 }
 
-func openBrowserCmd(ws state.Workspace) tea.Cmd {
+func openBrowserCmd(ws registry.Workspace) tea.Cmd {
 	return func() tea.Msg {
 		url := fmt.Sprintf("http://localhost:%d", ws.Port)
 		err := openURL(url)
@@ -799,17 +773,7 @@ func runAllCmd(item repoItem) tea.Cmd {
 			return runAllResultMsg{repoName: repo.Name, err: err}
 		}
 
-		commonDir, err := git.CommonDir(repo.Path)
-		if err != nil {
-			return runAllResultMsg{repoName: repo.Name, err: err}
-		}
-
 		rootPath, err := git.RootWorktreePath(repo.Path)
-		if err != nil {
-			return runAllResultMsg{repoName: repo.Name, err: err}
-		}
-
-		st, err := state.Load(commonDir)
 		if err != nil {
 			return runAllResultMsg{repoName: repo.Name, err: err}
 		}
@@ -833,7 +797,7 @@ func runAllCmd(item repoItem) tea.Cmd {
 		}
 
 		var started int
-		for _, ws := range st.Workspaces {
+		for _, ws := range repo.Workspaces {
 			sessionName := tmux.SessionName(repoName, ws.Name)
 			if runningSessions[sessionName] {
 				continue
@@ -905,17 +869,7 @@ func runAllGlobalCmd(items []repoItem) tea.Cmd {
 			}
 			repo := item.Repo
 
-			commonDir, err := git.CommonDir(repo.Path)
-			if err != nil {
-				continue
-			}
-
 			rootPath, err := git.RootWorktreePath(repo.Path)
-			if err != nil {
-				continue
-			}
-
-			st, err := state.Load(commonDir)
 			if err != nil {
 				continue
 			}
@@ -928,7 +882,7 @@ func runAllGlobalCmd(items []repoItem) tea.Cmd {
 			defaultBranch, _ := git.DefaultBranch(rootPath)
 			repoName := tmux.RepoName(rootPath)
 
-			for _, ws := range st.Workspaces {
+			for _, ws := range repo.Workspaces {
 				sessionName := tmux.SessionName(repoName, ws.Name)
 				if runningSessions[sessionName] {
 					continue
@@ -991,16 +945,26 @@ func stopAllGlobalCmd() tea.Cmd {
 
 func loadOpenersCmd() tea.Cmd {
 	return func() tea.Msg {
-		path, err := opener.DefaultPath()
+		path, err := userconfig.DefaultPath()
 		if err != nil {
 			return openersLoadedMsg{err: err}
 		}
-		openers, err := opener.Load(path)
+		cfg, err := userconfig.Load(path)
 		if err != nil {
 			return openersLoadedMsg{err: err}
 		}
-		return openersLoadedMsg{openers: openers}
+		return openersLoadedMsg{openers: cfg.Openers}
 	}
+}
+
+// findDefaultOpener returns the opener marked as default, or nil if none.
+func findDefaultOpener(openers []userconfig.Opener) *userconfig.Opener {
+	for i := range openers {
+		if openers[i].Default {
+			return &openers[i]
+		}
+	}
+	return nil
 }
 
 // refreshRunningCounts re-derives RunningCount on all repos from tmux sessions.
@@ -1021,11 +985,19 @@ func refreshRunningCounts(repos []repoItem) {
 	}
 }
 
-func batchArchiveCmd(names []string, rootPath, commonDir string) tea.Cmd {
+func batchArchiveCmd(names []string, rootPath string) tea.Cmd {
 	return func() tea.Msg {
-		st, err := state.Load(commonDir)
+		regPath, err := registry.DefaultPath()
 		if err != nil {
-			return batchArchiveResultMsg{err: fmt.Errorf("loading state: %w", err)}
+			return batchArchiveResultMsg{err: fmt.Errorf("finding state path: %w", err)}
+		}
+		reg, err := registry.Load(regPath)
+		if err != nil {
+			return batchArchiveResultMsg{err: fmt.Errorf("loading registry: %w", err)}
+		}
+		repo := reg.FindByPath(rootPath)
+		if repo == nil {
+			return batchArchiveResultMsg{err: fmt.Errorf("repo not found for path %s", rootPath)}
 		}
 
 		cfg, err := config.Load(rootPath)
@@ -1038,7 +1010,7 @@ func batchArchiveCmd(names []string, rootPath, commonDir string) tea.Cmd {
 
 		var archived, failed []string
 		for _, name := range names {
-			ws := st.Find(name)
+			ws := repo.FindWorkspace(name)
 			if ws == nil {
 				failed = append(failed, name)
 				continue
@@ -1074,11 +1046,11 @@ func batchArchiveCmd(names []string, rootPath, commonDir string) tea.Cmd {
 			archived = append(archived, name)
 		}
 
-		// Batch state update
+		// Batch registry update
 		for _, name := range archived {
-			_ = st.Remove(name)
+			_ = repo.RemoveWorkspace(name)
 		}
-		if err := st.Save(commonDir); err != nil {
+		if err := reg.Save(regPath); err != nil {
 			return batchArchiveResultMsg{err: fmt.Errorf("saving state: %w", err)}
 		}
 
@@ -1086,7 +1058,7 @@ func batchArchiveCmd(names []string, rootPath, commonDir string) tea.Cmd {
 	}
 }
 
-func archiveWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd {
+func archiveWorkspaceCmd(ws registry.Workspace, rootPath string) tea.Cmd {
 	return func() tea.Msg {
 		// Auto-stop tmux session before archiving
 		if tmux.Available() == nil {
@@ -1123,14 +1095,21 @@ func archiveWorkspaceCmd(ws state.Workspace, rootPath, commonDir string) tea.Cmd
 			return archiveResultMsg{name: ws.Name, err: fmt.Errorf("removing worktree: %w", err)}
 		}
 
-		// Update state
-		st, err := state.Load(commonDir)
+		// Update registry
+		regPath, err := registry.DefaultPath()
 		if err != nil {
-			return archiveResultMsg{name: ws.Name, err: fmt.Errorf("loading state: %w", err)}
+			return archiveResultMsg{name: ws.Name, err: fmt.Errorf("finding state path: %w", err)}
 		}
-		_ = st.Remove(ws.Name)
-		if err := st.Save(commonDir); err != nil {
-			return archiveResultMsg{name: ws.Name, err: fmt.Errorf("saving state: %w", err)}
+		reg, err := registry.Load(regPath)
+		if err != nil {
+			return archiveResultMsg{name: ws.Name, err: fmt.Errorf("loading registry: %w", err)}
+		}
+		repo := reg.FindByPath(rootPath)
+		if repo != nil {
+			_ = repo.RemoveWorkspace(ws.Name)
+			if err := reg.Save(regPath); err != nil {
+				return archiveResultMsg{name: ws.Name, err: fmt.Errorf("saving state: %w", err)}
+			}
 		}
 
 		return archiveResultMsg{name: ws.Name}

@@ -40,15 +40,15 @@ cmd/                             # Cobra command definitions (one file per comma
   resolve.go                     # Shared resolveWorkspace() helper (local → global fallback)
 internal/
   config/config.go               # Load fr8.json / conductor.json
-  state/state.go                 # Workspace state CRUD (.git/fr8.json)
   git/git.go                     # Shell out to git (worktree, branch, status)
   port/port.go                   # Sequential port block allocation
   names/{names,words}.go         # Adjective-city name generation
   filesync/filesync.go           # .worktreeinclude glob + copy
   env/env.go                     # Build FR8_* and CONDUCTOR_* env vars
   workspace/resolve.go           # Resolve workspace by name, CWD, or global registry
-  registry/registry.go           # Global repo registry (~/.config/fr8/repos.json)
-  opener/opener.go               # Workspace opener config (~/.config/fr8/openers.json)
+  registry/registry.go           # Unified repo + workspace state (~/.local/state/fr8/repos.json)
+  userconfig/userconfig.go       # User preferences: openers (~/.config/fr8/config.json)
+  opener/opener.go               # Opener execution (Run only)
   tmux/tmux.go                   # Thin wrapper around tmux CLI for background sessions
   tui/                           # Bubble Tea dashboard TUI
     create_workspace.go          # TUI view for creating workspaces
@@ -79,4 +79,6 @@ Key architectural notes:
 
 - `createWorkspace()` in `cmd/new.go` is the shared creation function used by both CLI and TUI dashboard
 - Background process management uses tmux sessions named `fr8/<repo>/<workspace>`; graceful degradation when tmux is not installed
-- Workspace openers are stored at `~/.config/fr8/openers.json`; TUI picker shown when multiple workspaces are configured
+- State storage: `~/.local/state/fr8/repos.json` (unified repo + workspace registry); `~/.config/fr8/config.json` (user preferences like openers)
+- Env var overrides: `FR8_STATE_DIR` for state, `FR8_CONFIG_DIR` for config
+- Auto-migration from old format (`~/.config/fr8/repos.json` + `.git/fr8.json`) runs on first command

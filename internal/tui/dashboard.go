@@ -4,19 +4,18 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/registry"
 )
 
 // DashboardResult holds the outcome of the TUI session.
 type DashboardResult struct {
-	ShellWorkspace   *state.Workspace
-	AttachWorkspace  *state.Workspace
-	OpenWorkspace    *state.Workspace
-	OpenerName       string
-	RootPath         string
-	CreateRequested  bool
-	CreateName       string
-	CommonDir        string
+	ShellWorkspace  *registry.Workspace
+	AttachWorkspace *registry.Workspace
+	OpenWorkspace   *registry.Workspace
+	OpenerName      string
+	RootPath        string
+	CreateRequested bool
+	CreateName      string
 }
 
 // RunDashboard launches the interactive TUI and returns the result.
@@ -47,7 +46,6 @@ func RunDashboard() (*DashboardResult, error) {
 		result.CreateRequested = true
 		result.CreateName = fm.createRequest.name
 		result.RootPath = fm.createRequest.rootPath
-		result.CommonDir = fm.createRequest.commonDir
 	}
 	return result, nil
 }
