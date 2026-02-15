@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -27,6 +28,7 @@ type model struct {
 	repos             []repoItem
 	workspaces        []workspaceItem
 	cursor            int
+	repoCursor        int // remembered cursor position on repo list
 	loading           bool
 	err               error
 	repoName          string // current repo being viewed
@@ -45,6 +47,18 @@ type model struct {
 	width             int
 	height            int
 	spinner           spinner.Model
+
+	// Toast notifications
+	toast        string
+	toastExpiry  time.Time
+	toastIsError bool
+
+	// Search/filter
+	filtering   bool
+	filterInput textinput.Model
+
+	// Multi-select
+	selected map[int]bool
 }
 
 func newModel() model {
@@ -61,12 +75,13 @@ func newModel() model {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(loadReposCmd, m.spinner.Tick)
+	return tea.Batch(loadReposCmd, m.spinner.Tick, autoRefreshTickCmd())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		debugLog("WindowSizeMsg: width=%d→%d height=%d→%d", m.width, msg.Width, m.height, msg.Height)
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
@@ -103,7 +118,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.repoName = msg.repoName
 		m.rootPath = msg.rootPath
 		m.defaultBranch = msg.defaultBranch
-		m.cursor = 0
+		if m.view == viewWorkspaceList {
+			// Refresh: clamp cursor instead of resetting
+			if m.cursor >= len(m.workspaces) && m.cursor > 0 {
+				m.cursor = len(m.workspaces) - 1
+			}
+		} else {
+			m.cursor = 0
+		}
 		m.view = viewWorkspaceList
 		return m, nil
 
@@ -111,8 +133,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.toast = fmt.Sprintf("error archiving %s", msg.name)
+			m.toastIsError = true
+			m.toastExpiry = time.Now().Add(3 * time.Second)
 			m.view = viewWorkspaceList
-			return m, nil
+			return m, toastTickCmd()
 		}
 		// Remove archived workspace from list
 		for i, ws := range m.workspaces {
@@ -132,38 +157,51 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.err = nil
+		m.toast = fmt.Sprintf("archived %s", msg.name)
+		m.toastIsError = false
+		m.toastExpiry = time.Now().Add(3 * time.Second)
 		m.view = viewWorkspaceList
-		return m, nil
+		return m, toastTickCmd()
 
 	case startResultMsg:
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
-			return m, nil
-		}
-		for i, ws := range m.workspaces {
-			if ws.Workspace.Name == msg.name {
-				m.workspaces[i].Running = true
-				break
+			m.toast = fmt.Sprintf("error starting %s", msg.name)
+			m.toastIsError = true
+		} else {
+			for i, ws := range m.workspaces {
+				if ws.Workspace.Name == msg.name {
+					m.workspaces[i].Running = true
+					break
+				}
 			}
+			m.err = nil
+			m.toast = fmt.Sprintf("started %s", msg.name)
+			m.toastIsError = false
 		}
-		m.err = nil
-		return m, nil
+		m.toastExpiry = time.Now().Add(3 * time.Second)
+		return m, toastTickCmd()
 
 	case stopResultMsg:
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
-			return m, nil
-		}
-		for i, ws := range m.workspaces {
-			if ws.Workspace.Name == msg.name {
-				m.workspaces[i].Running = false
-				break
+			m.toast = fmt.Sprintf("error stopping %s", msg.name)
+			m.toastIsError = true
+		} else {
+			for i, ws := range m.workspaces {
+				if ws.Workspace.Name == msg.name {
+					m.workspaces[i].Running = false
+					break
+				}
 			}
+			m.err = nil
+			m.toast = fmt.Sprintf("stopped %s", msg.name)
+			m.toastIsError = false
 		}
-		m.err = nil
-		return m, nil
+		m.toastExpiry = time.Now().Add(3 * time.Second)
+		return m, toastTickCmd()
 
 	case browserResultMsg:
 		if msg.err != nil {
@@ -175,28 +213,41 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.toast = fmt.Sprintf("error running workspaces: %v", msg.err)
+			m.toastIsError = true
 		} else {
 			m.err = nil
+			m.toast = fmt.Sprintf("started %d workspaces", msg.started)
+			m.toastIsError = false
 		}
+		m.toastExpiry = time.Now().Add(3 * time.Second)
 		refreshRunningCounts(m.repos)
-		return m, nil
+		return m, toastTickCmd()
 
 	case stopAllResultMsg:
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.toast = fmt.Sprintf("error stopping workspaces: %v", msg.err)
+			m.toastIsError = true
 		} else {
 			m.err = nil
+			m.toast = fmt.Sprintf("stopped %d workspaces", msg.stopped)
+			m.toastIsError = false
 		}
+		m.toastExpiry = time.Now().Add(3 * time.Second)
 		refreshRunningCounts(m.repos)
-		return m, nil
+		return m, toastTickCmd()
 
 	case batchArchiveResultMsg:
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.toast = "batch archive failed"
+			m.toastIsError = true
+			m.toastExpiry = time.Now().Add(3 * time.Second)
 			m.view = viewWorkspaceList
-			return m, nil
+			return m, toastTickCmd()
 		}
 		// Remove archived workspaces from list
 		archived := make(map[string]bool, len(msg.archived))
@@ -224,9 +275,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		if len(msg.failed) > 0 {
 			m.err = fmt.Errorf("archiving: %s", strings.Join(msg.failed, ", "))
+			m.toast = fmt.Sprintf("archived %d, %d failed", len(msg.archived), len(msg.failed))
+			m.toastIsError = true
+		} else {
+			m.toast = fmt.Sprintf("archived %d workspaces", len(msg.archived))
+			m.toastIsError = false
 		}
+		m.toastExpiry = time.Now().Add(3 * time.Second)
 		m.view = viewWorkspaceList
-		return m, nil
+		return m, toastTickCmd()
 
 	case openersLoadedMsg:
 		m.loading = false
@@ -261,6 +318,81 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openerCursor = 0
 		m.view = viewOpenerPicker
 		return m, nil
+
+	case toastTickMsg:
+		if m.toast != "" && time.Now().After(m.toastExpiry) {
+			m.toast = ""
+			m.toastIsError = false
+		}
+		if m.toast != "" {
+			return m, toastTickCmd()
+		}
+		return m, nil
+
+	case batchStartResultMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			m.toast = fmt.Sprintf("error starting workspaces: %v", msg.err)
+			m.toastIsError = true
+		} else {
+			m.err = nil
+			m.toast = fmt.Sprintf("started %d workspaces", msg.started)
+			m.toastIsError = false
+		}
+		m.toastExpiry = time.Now().Add(3 * time.Second)
+		m.selected = nil
+		refreshRunningCounts(m.repos)
+		return m, toastTickCmd()
+
+	case batchStopResultMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			m.toast = fmt.Sprintf("error stopping workspaces: %v", msg.err)
+			m.toastIsError = true
+		} else {
+			m.err = nil
+			m.toast = fmt.Sprintf("stopped %d workspaces", msg.stopped)
+			m.toastIsError = false
+		}
+		m.toastExpiry = time.Now().Add(3 * time.Second)
+		m.selected = nil
+		refreshRunningCounts(m.repos)
+		return m, toastTickCmd()
+
+	case autoRefreshTickMsg:
+		if m.loading {
+			return m, tea.Batch(autoRefreshTickCmd(), tea.WindowSize())
+		}
+		return m, tea.Batch(autoRefreshCmd(), autoRefreshTickCmd(), tea.WindowSize())
+
+	case autoRefreshResultMsg:
+		if msg.err != nil {
+			return m, nil
+		}
+		// Build running session lookup
+		runningSessions := make(map[string]bool, len(msg.sessions))
+		for _, s := range msg.sessions {
+			runningSessions[s.Name] = true
+		}
+		// Update workspace running states
+		if m.rootPath != "" {
+			repoName := tmux.RepoName(m.rootPath)
+			for i, ws := range m.workspaces {
+				sessionName := tmux.SessionName(repoName, ws.Workspace.Name)
+				m.workspaces[i].Running = runningSessions[sessionName]
+			}
+		}
+		// Update repo running counts
+		repoCounts := make(map[string]int)
+		for _, s := range msg.sessions {
+			repoCounts[s.Repo]++
+		}
+		for i := range m.repos {
+			m.repos[i].RunningCount = repoCounts[tmux.RepoName(m.repos[i].Repo.Path)]
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -273,6 +405,16 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if m.loading {
 		return m, nil
+	}
+
+	// Redraw (ctrl+l) — clear screen and re-query terminal size from any view
+	if key.Matches(msg, keys.Redraw) {
+		return m, tea.Batch(tea.ClearScreen, tea.WindowSize())
+	}
+
+	// While filtering, forward keys to textinput except Esc and Enter
+	if m.filtering {
+		return m.handleFilterKey(msg)
 	}
 
 	// Toggle help overlay from any view (except text input views)
@@ -308,33 +450,53 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleRepoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	filtered := filteredRepos(m.repos, m.filterInput.Value())
+
 	switch {
+	case key.Matches(msg, keys.Filter):
+		ti := textinput.New()
+		ti.Placeholder = "filter..."
+		ti.Focus()
+		ti.CharLimit = 64
+		m.filterInput = ti
+		m.filtering = true
+		m.cursor = 0
+		return m, ti.Cursor.BlinkCmd()
+	case key.Matches(msg, keys.Refresh):
+		m.loading = true
+		m.err = nil
+		return m, tea.Batch(loadReposCmd, m.spinner.Tick, tea.ClearScreen)
 	case key.Matches(msg, keys.Up):
 		if m.cursor > 0 {
 			m.cursor--
 		}
 	case key.Matches(msg, keys.Down):
-		if m.cursor < len(m.repos)-1 {
+		if m.cursor < len(filtered)-1 {
 			m.cursor++
 		}
 	case key.Matches(msg, keys.Enter):
-		if len(m.repos) > 0 {
+		if len(filtered) > 0 {
+			m.repoCursor = m.cursor // remember position for back-navigation
 			m.loading = true
 			m.err = nil
-			repo := m.repos[m.cursor].Repo
+			origIdx := resolveOriginalRepoIndex(m.cursor, filtered, m.repos)
+			repo := m.repos[origIdx].Repo
+			m.filterInput.SetValue("") // clear filter on drill-down
 			return m, tea.Batch(loadWorkspacesCmd(repo), m.spinner.Tick)
 		}
 	case key.Matches(msg, keys.Run):
-		if len(m.repos) > 0 {
+		if len(filtered) > 0 {
 			m.loading = true
 			m.err = nil
-			return m, tea.Batch(runAllCmd(m.repos[m.cursor]), m.spinner.Tick)
+			origIdx := resolveOriginalRepoIndex(m.cursor, filtered, m.repos)
+			return m, tea.Batch(runAllCmd(m.repos[origIdx]), m.spinner.Tick)
 		}
 	case key.Matches(msg, keys.Stop):
-		if len(m.repos) > 0 {
+		if len(filtered) > 0 {
 			m.loading = true
 			m.err = nil
-			return m, tea.Batch(stopAllCmd(m.repos[m.cursor]), m.spinner.Tick)
+			origIdx := resolveOriginalRepoIndex(m.cursor, filtered, m.repos)
+			return m, tea.Batch(stopAllCmd(m.repos[origIdx]), m.spinner.Tick)
 		}
 	case key.Matches(msg, keys.RunAllGlobal):
 		if len(m.repos) > 0 {
@@ -353,22 +515,73 @@ func (m model) handleRepoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	filtered := filteredWorkspaces(m.workspaces, m.filterInput.Value())
+
+	// Helper to resolve the original workspace from the filtered cursor position
+	resolveWs := func() workspaceItem {
+		origIdx := resolveOriginalWsIndex(m.cursor, filtered, m.workspaces)
+		return m.workspaces[origIdx]
+	}
+
 	switch {
+	case key.Matches(msg, keys.Filter):
+		ti := textinput.New()
+		ti.Placeholder = "filter..."
+		ti.Focus()
+		ti.CharLimit = 64
+		m.filterInput = ti
+		m.filtering = true
+		m.cursor = 0
+		return m, ti.Cursor.BlinkCmd()
+	case key.Matches(msg, keys.Refresh):
+		if m.rootPath != "" {
+			m.loading = true
+			m.err = nil
+			// Find the repo in the list
+			for _, r := range m.repos {
+				if r.Repo.Name == m.repoName {
+					return m, tea.Batch(loadWorkspacesCmd(r.Repo), m.spinner.Tick, tea.ClearScreen)
+				}
+			}
+		}
+	case key.Matches(msg, keys.Select):
+		if len(filtered) > 0 {
+			if m.selected == nil {
+				m.selected = make(map[int]bool)
+			}
+			origIdx := resolveOriginalWsIndex(m.cursor, filtered, m.workspaces)
+			if m.selected[origIdx] {
+				delete(m.selected, origIdx)
+			} else {
+				m.selected[origIdx] = true
+			}
+			// Advance cursor
+			if m.cursor < len(filtered)-1 {
+				m.cursor++
+			}
+		}
 	case key.Matches(msg, keys.Up):
 		if m.cursor > 0 {
 			m.cursor--
 		}
 	case key.Matches(msg, keys.Down):
-		if m.cursor < len(m.workspaces)-1 {
+		if m.cursor < len(filtered)-1 {
 			m.cursor++
 		}
 	case key.Matches(msg, keys.Back):
+		// First Esc clears selection, second navigates back
+		if len(m.selected) > 0 {
+			m.selected = nil
+			return m, nil
+		}
 		m.view = viewRepoList
-		m.cursor = 0
+		m.cursor = m.repoCursor // restore remembered cursor position
 		m.err = nil
+		m.filterInput.SetValue("") // clear filter on back
 	case key.Matches(msg, keys.Archive):
-		if len(m.workspaces) > 0 {
-			m.archiveIdx = m.cursor
+		if len(filtered) > 0 {
+			origIdx := resolveOriginalWsIndex(m.cursor, filtered, m.workspaces)
+			m.archiveIdx = origIdx
 			m.view = viewConfirmArchive
 		}
 	case key.Matches(msg, keys.BatchArchive):
@@ -387,8 +600,8 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.view = viewConfirmBatchArchive
 		}
 	case key.Matches(msg, keys.Shell):
-		if len(m.workspaces) > 0 {
-			ws := m.workspaces[m.cursor]
+		if len(filtered) > 0 {
+			ws := resolveWs()
 			m.shellRequest = &shellRequestMsg{
 				workspace: ws.Workspace,
 				rootPath:  m.rootPath,
@@ -396,8 +609,14 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case key.Matches(msg, keys.Run):
-		if len(m.workspaces) > 0 {
-			ws := m.workspaces[m.cursor]
+		if len(filtered) > 0 {
+			// Multi-select batch run
+			if len(m.selected) > 0 {
+				m.loading = true
+				m.err = nil
+				return m, tea.Batch(startSelectedCmd(m.workspaces, m.selected, m.rootPath), m.spinner.Tick)
+			}
+			ws := resolveWs()
 			if ws.Running {
 				m.err = fmt.Errorf("%q is already running", ws.Workspace.Name)
 				return m, nil
@@ -407,13 +626,19 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(startWorkspaceCmd(ws.Workspace, m.rootPath), m.spinner.Tick)
 		}
 	case key.Matches(msg, keys.Browser):
-		if len(m.workspaces) > 0 {
-			ws := m.workspaces[m.cursor]
+		if len(filtered) > 0 {
+			ws := resolveWs()
 			return m, openBrowserCmd(ws.Workspace)
 		}
 	case key.Matches(msg, keys.Stop):
-		if len(m.workspaces) > 0 {
-			ws := m.workspaces[m.cursor]
+		if len(filtered) > 0 {
+			// Multi-select batch stop
+			if len(m.selected) > 0 {
+				m.loading = true
+				m.err = nil
+				return m, tea.Batch(stopSelectedCmd(m.workspaces, m.selected, m.rootPath), m.spinner.Tick)
+			}
+			ws := resolveWs()
 			if !ws.Running {
 				m.err = fmt.Errorf("%q is not running", ws.Workspace.Name)
 				return m, nil
@@ -423,8 +648,8 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(stopWorkspaceCmd(ws.Workspace, m.rootPath), m.spinner.Tick)
 		}
 	case key.Matches(msg, keys.Attach):
-		if len(m.workspaces) > 0 {
-			ws := m.workspaces[m.cursor]
+		if len(filtered) > 0 {
+			ws := resolveWs()
 			if !ws.Running {
 				m.err = fmt.Errorf("%q is not running (run with r)", ws.Workspace.Name)
 				return m, nil
@@ -436,8 +661,9 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case key.Matches(msg, keys.Open):
-		if len(m.workspaces) > 0 {
-			m.openerWsIdx = m.cursor
+		if len(filtered) > 0 {
+			origIdx := resolveOriginalWsIndex(m.cursor, filtered, m.workspaces)
+			m.openerWsIdx = origIdx
 			m.loading = true
 			m.err = nil
 			return m, tea.Batch(loadOpenersCmd(), m.spinner.Tick)
@@ -456,6 +682,31 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Enter does nothing on workspace list (no further drill-down)
 	}
 	return m, nil
+}
+
+// handleFilterKey handles keypresses while filter mode is active.
+func (m model) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.filtering = false
+		m.filterInput.SetValue("")
+		m.cursor = 0
+		return m, nil
+	case tea.KeyEnter:
+		m.filtering = false
+		m.filterInput.Blur()
+		// Keep filter value, exit filter input mode
+		return m, nil
+	}
+
+	oldVal := m.filterInput.Value()
+	var cmd tea.Cmd
+	m.filterInput, cmd = m.filterInput.Update(msg)
+	// Reset cursor when filter text changes
+	if m.filterInput.Value() != oldVal {
+		m.cursor = 0
+	}
+	return m, cmd
 }
 
 func (m model) handleOpenerPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -548,7 +799,9 @@ func (m model) View() string {
 	case viewHelp:
 		s = renderHelp(m)
 	}
-	return padToHeight(s, m.height)
+	out := constrainWidth(padToHeight(s, m.height), m.width)
+	debugLogView(out, m.width, m.height)
+	return out
 }
 
 // Async commands
@@ -965,6 +1218,162 @@ func findDefaultOpener(openers []userconfig.Opener) *userconfig.Opener {
 		}
 	}
 	return nil
+}
+
+// --- Filter helpers ---
+
+// filteredRepos returns repos matching the query (case-insensitive substring).
+func filteredRepos(repos []repoItem, query string) []repoItem {
+	if query == "" {
+		return repos
+	}
+	q := strings.ToLower(query)
+	var result []repoItem
+	for _, r := range repos {
+		if strings.Contains(strings.ToLower(r.Repo.Name), q) {
+			result = append(result, r)
+		}
+	}
+	return result
+}
+
+// filteredWorkspaces returns workspaces matching the query (case-insensitive
+// substring match on name or branch).
+func filteredWorkspaces(workspaces []workspaceItem, query string) []workspaceItem {
+	if query == "" {
+		return workspaces
+	}
+	q := strings.ToLower(query)
+	var result []workspaceItem
+	for _, ws := range workspaces {
+		if strings.Contains(strings.ToLower(ws.Workspace.Name), q) ||
+			strings.Contains(strings.ToLower(ws.Branch), q) {
+			result = append(result, ws)
+		}
+	}
+	return result
+}
+
+// resolveOriginalRepoIndex maps a cursor index in the filtered list back to
+// the original repos slice index.
+func resolveOriginalRepoIndex(cursor int, filtered, original []repoItem) int {
+	if cursor >= len(filtered) {
+		return 0
+	}
+	target := filtered[cursor]
+	for i, r := range original {
+		if r.Repo.Name == target.Repo.Name && r.Repo.Path == target.Repo.Path {
+			return i
+		}
+	}
+	return 0
+}
+
+// resolveOriginalWsIndex maps a cursor index in the filtered list back to
+// the original workspaces slice index.
+func resolveOriginalWsIndex(cursor int, filtered, original []workspaceItem) int {
+	if cursor >= len(filtered) {
+		return 0
+	}
+	target := filtered[cursor]
+	for i, ws := range original {
+		if ws.Workspace.Name == target.Workspace.Name && ws.Workspace.Path == target.Workspace.Path {
+			return i
+		}
+	}
+	return 0
+}
+
+// --- Toast / timer commands ---
+
+func toastTickCmd() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+		return toastTickMsg{}
+	})
+}
+
+func autoRefreshTickCmd() tea.Cmd {
+	return tea.Tick(5*time.Second, func(time.Time) tea.Msg {
+		return autoRefreshTickMsg{}
+	})
+}
+
+func autoRefreshCmd() tea.Cmd {
+	return func() tea.Msg {
+		if tmux.Available() != nil {
+			return autoRefreshResultMsg{}
+		}
+		sessions, err := tmux.ListFr8Sessions()
+		return autoRefreshResultMsg{sessions: sessions, err: err}
+	}
+}
+
+// --- Multi-select batch commands ---
+
+func startSelectedCmd(workspaces []workspaceItem, selected map[int]bool, rootPath string) tea.Cmd {
+	return func() tea.Msg {
+		if err := tmux.Available(); err != nil {
+			return batchStartResultMsg{err: err}
+		}
+
+		cfg, err := config.Load(rootPath)
+		if err != nil {
+			return batchStartResultMsg{err: fmt.Errorf("loading config: %w", err)}
+		}
+		if cfg.Scripts.Run == "" {
+			return batchStartResultMsg{err: fmt.Errorf("no run script configured")}
+		}
+
+		defaultBranch, _ := git.DefaultBranch(rootPath)
+		repoName := tmux.RepoName(rootPath)
+
+		var started int
+		for idx := range selected {
+			if idx >= len(workspaces) {
+				continue
+			}
+			ws := workspaces[idx]
+			if ws.Running {
+				continue
+			}
+			sessionName := tmux.SessionName(repoName, ws.Workspace.Name)
+			envVars := env.BuildFr8Only(&ws.Workspace, rootPath, defaultBranch)
+			if err := tmux.Start(sessionName, ws.Workspace.Path, cfg.Scripts.Run, envVars); err != nil {
+				return batchStartResultMsg{started: started, err: err}
+			}
+			started++
+		}
+
+		return batchStartResultMsg{started: started}
+	}
+}
+
+func stopSelectedCmd(workspaces []workspaceItem, selected map[int]bool, rootPath string) tea.Cmd {
+	return func() tea.Msg {
+		if err := tmux.Available(); err != nil {
+			return batchStopResultMsg{err: err}
+		}
+
+		repoName := tmux.RepoName(rootPath)
+
+		var stopped int
+		for idx := range selected {
+			if idx >= len(workspaces) {
+				continue
+			}
+			ws := workspaces[idx]
+			if !ws.Running {
+				continue
+			}
+			sessionName := tmux.SessionName(repoName, ws.Workspace.Name)
+			if err := tmux.Stop(sessionName); err != nil {
+				return batchStopResultMsg{stopped: stopped, err: err}
+			}
+			stopped++
+		}
+
+		return batchStopResultMsg{stopped: stopped}
+	}
 }
 
 // refreshRunningCounts re-derives RunningCount on all repos from tmux sessions.

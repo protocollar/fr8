@@ -6,7 +6,36 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
+
+const wideThreshold = 120
+
+func isWide(width int) bool {
+	if os.Getenv("TERMINAL_EMULATOR") == "JetBrains-JediTerm" {
+		return false // JediTerm has Unicode width issues with side-by-side layout
+	}
+	return width >= wideThreshold
+}
+
+// chromeHeight returns the number of vertical lines consumed by non-list UI
+// elements (breadcrumb, status bar, detail pane, help bar, toast, filter).
+func chromeHeight(m model) int {
+	h := 5 // breadcrumb(2) + help(2) + bottom margin(1)
+	if len(m.repos) > 0 {
+		h++ // status bar
+	}
+	if m.toast != "" {
+		h++ // toast line
+	}
+	if m.filtering {
+		h++ // filter input
+	}
+	if !isWide(m.width) {
+		h += 6 // detail pane (stacked mode only)
+	}
+	return h
+}
 
 // renderTitledPanel renders content inside a rounded-border box with an
 // optional inline title embedded in the top border.
@@ -44,8 +73,10 @@ func renderTitledPanel(title, content string, width int) string {
 	for _, line := range lines {
 		lineWidth := lipgloss.Width(line)
 		if lineWidth > innerWidth {
-			line = lipgloss.NewStyle().MaxWidth(innerWidth).Render(line)
-			lineWidth = lipgloss.Width(line)
+			// Hard-truncate (not wrap) to prevent multi-line blowout
+			// inside bordered panels.
+			line = ansi.Truncate(line, innerWidth, "")
+			lineWidth = ansi.StringWidth(line)
 		}
 		pad := innerWidth - lineWidth
 		if pad < 0 {
@@ -63,7 +94,13 @@ func renderTitledPanel(title, content string, width int) string {
 	// Bottom border.
 	bottom := borderFg.Render("╰" + strings.Repeat("─", width-2) + "╯")
 
-	return top.String() + "\n" + body.String() + bottom
+	result := top.String() + "\n" + body.String() + bottom
+	topWidth := ansi.StringWidth(top.String())
+	bottomWidth := ansi.StringWidth(bottom)
+	if topWidth != width || bottomWidth != width {
+		debugLog("renderTitledPanel(%q, width=%d): topWidth=%d bottomWidth=%d", title, width, topWidth, bottomWidth)
+	}
+	return result
 }
 
 type helpItem struct {
@@ -115,6 +152,26 @@ func renderHelpBar(items []helpItem, width int) string {
 	return strings.Join(lines, "\n")
 }
 
+// constrainWidth ensures every line in s is exactly maxWidth visual characters.
+// Lines wider than maxWidth are truncated; lines narrower are right-padded with spaces.
+// This prevents rendering artefacts when lipgloss.JoinHorizontal produces lines
+// wider than the terminal or when the terminal is resized narrower.
+func constrainWidth(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		w := ansi.StringWidth(line)
+		if w > maxWidth {
+			lines[i] = ansi.Truncate(line, maxWidth, "")
+		} else if w < maxWidth {
+			lines[i] = line + strings.Repeat(" ", maxWidth-w)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // padToHeight appends empty lines so the output fills exactly targetHeight lines.
 func padToHeight(s string, targetHeight int) string {
 	lines := strings.Count(s, "\n")
@@ -160,4 +217,39 @@ func shortenPath(p string) string {
 // renderDetailRow renders a single label: value row for the detail pane.
 func renderDetailRow(label, value string) string {
 	return fmt.Sprintf("%s%s", detailLabelStyle.Render(label), detailValueStyle.Render(value))
+}
+
+// renderTitledPanelWithPos is like renderTitledPanel but appends a position
+// indicator " (3/12)" to the title when the list overflows the viewport.
+func renderTitledPanelWithPos(title, content string, width, cursor1Based, total, visible int) string {
+	if total > visible {
+		title = fmt.Sprintf("%s (%d/%d)", title, cursor1Based, total)
+	}
+	return renderTitledPanel(title, content, width)
+}
+
+// renderStatusBar renders a summary line with repo/workspace/running counts.
+func renderStatusBar(repos []repoItem, width int) string {
+	if len(repos) == 0 {
+		return ""
+	}
+	var totalWs, totalRunning int
+	for _, r := range repos {
+		totalWs += r.WorkspaceCount
+		totalRunning += r.RunningCount
+	}
+	line := fmt.Sprintf("%d repos · %d workspaces · %d running", len(repos), totalWs, totalRunning)
+	return "  " + statusBarStyle.Render(line)
+}
+
+// renderToast renders a toast notification message.
+func renderToast(toast string, isError bool, width int) string {
+	if toast == "" {
+		return ""
+	}
+	style := toastStyle
+	if isError {
+		style = toastErrorStyle
+	}
+	return "  " + style.Render(toast)
 }

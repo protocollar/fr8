@@ -4,6 +4,7 @@ import (
 	"github.com/protocollar/fr8/internal/gh"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/tmux"
 	"github.com/protocollar/fr8/internal/userconfig"
 )
 
@@ -120,4 +121,26 @@ type batchArchiveResultMsg struct {
 type createRequestMsg struct {
 	name     string
 	rootPath string
+}
+
+// Toast notifications
+type toastTickMsg struct{}
+
+// Multi-select batch operations
+type batchStartResultMsg struct {
+	started int
+	err     error
+}
+
+type batchStopResultMsg struct {
+	stopped int
+	err     error
+}
+
+// Auto-refresh
+type autoRefreshTickMsg struct{}
+
+type autoRefreshResultMsg struct {
+	sessions []tmux.Session
+	err      error
 }

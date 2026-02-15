@@ -18,6 +18,10 @@ type keyMap struct {
 	Attach         key.Binding
 	RunAllGlobal   key.Binding
 	StopAllGlobal  key.Binding
+	Filter         key.Binding
+	Select         key.Binding
+	Refresh        key.Binding
+	Redraw         key.Binding
 	Help           key.Binding
 	Quit           key.Binding
 	Yes            key.Binding
@@ -84,6 +88,22 @@ var keys = keyMap{
 	StopAllGlobal: key.NewBinding(
 		key.WithKeys("X"),
 		key.WithHelp("X", "global stop"),
+	),
+	Filter: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "filter"),
+	),
+	Select: key.NewBinding(
+		key.WithKeys(" "),
+		key.WithHelp("space", "select"),
+	),
+	Refresh: key.NewBinding(
+		key.WithKeys("ctrl+r"),
+		key.WithHelp("ctrl+r", "refresh"),
+	),
+	Redraw: key.NewBinding(
+		key.WithKeys("ctrl+l"),
+		key.WithHelp("ctrl+l", "redraw"),
 	),
 	Help: key.NewBinding(
 		key.WithKeys("?"),

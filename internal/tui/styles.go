@@ -86,6 +86,19 @@ var (
 			Padding(0, 1)
 )
 
+// Status bar
+var statusBarStyle = lipgloss.NewStyle().
+	Foreground(colorSubtle)
+
+// Toast notifications
+var (
+	toastStyle = lipgloss.NewStyle().
+			Foreground(colorGreen)
+
+	toastErrorStyle = lipgloss.NewStyle().
+			Foreground(colorRed)
+)
+
 // Misc
 var (
 	errorStyle = lipgloss.NewStyle().
@@ -100,4 +113,8 @@ var (
 
 	spinnerStyle = lipgloss.NewStyle().
 			Foreground(colorAccent)
+
+	filterActiveStyle = lipgloss.NewStyle().
+				Foreground(colorSubtle).
+				Italic(true)
 )

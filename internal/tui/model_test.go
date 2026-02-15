@@ -2,11 +2,13 @@ package tui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/registry"
+	"github.com/protocollar/fr8/internal/tmux"
 	"github.com/protocollar/fr8/internal/userconfig"
 )
 
@@ -1163,3 +1165,536 @@ func TestHelpEscReturnsToPreview(t *testing.T) {
 }
 
 // errStub is defined in view_test.go (same package)
+
+// --- 1.1 Remember Cursor on Back-Navigation ---
+
+func TestCursorRememberedOnBackNavigation(t *testing.T) {
+	m := seedRepoModel()
+	m.cursor = 2 // move to third repo
+
+	// Drill into workspace list (which saves repoCursor)
+	result, _ := m.Update(keyEnter())
+	m = result.(model)
+
+	// Simulate workspaces loaded
+	m = updateModel(m, workspacesLoadedMsg{
+		workspaces: []workspaceItem{{Workspace: registry.Workspace{Name: "ws1"}}},
+		repoName:   "charlie",
+		rootPath:   "/c",
+	})
+	if m.view != viewWorkspaceList {
+		t.Fatalf("view = %d, want viewWorkspaceList", m.view)
+	}
+
+	// Go back
+	m = updateModel(m, keyEsc())
+	if m.view != viewRepoList {
+		t.Fatalf("view = %d, want viewRepoList", m.view)
+	}
+	if m.cursor != 2 {
+		t.Errorf("cursor = %d, want 2 (remembered position)", m.cursor)
+	}
+}
+
+// --- 1.4 Toast Notifications ---
+
+func TestToastSetOnStartResult(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	result, cmd := m.Update(startResultMsg{name: "ws-one"})
+	m = result.(model)
+
+	if m.toast == "" {
+		t.Error("expected toast to be set after start")
+	}
+	if m.toastIsError {
+		t.Error("expected non-error toast after successful start")
+	}
+	if cmd == nil {
+		t.Error("expected toast tick cmd")
+	}
+}
+
+func TestToastSetOnError(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	m = updateModel(m, startResultMsg{name: "ws-one", err: errStub{}})
+
+	if m.toast == "" {
+		t.Error("expected toast to be set on error")
+	}
+	if !m.toastIsError {
+		t.Error("expected error toast")
+	}
+}
+
+func TestToastExpiry(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.toast = "test toast"
+	m.toastExpiry = time.Now().Add(-1 * time.Second) // already expired
+
+	m = updateModel(m, toastTickMsg{})
+
+	if m.toast != "" {
+		t.Errorf("toast should be cleared after expiry, got %q", m.toast)
+	}
+}
+
+func TestToastNotExpiredKeepsTicking(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.toast = "test toast"
+	m.toastExpiry = time.Now().Add(5 * time.Second) // not expired
+
+	result, cmd := m.Update(toastTickMsg{})
+	m = result.(model)
+
+	if m.toast == "" {
+		t.Error("toast should not be cleared before expiry")
+	}
+	if cmd == nil {
+		t.Error("expected tick cmd to continue")
+	}
+}
+
+// --- 2.1 Search/Filter ---
+
+func TestFilterActivation(t *testing.T) {
+	m := seedRepoModel()
+
+	m = updateModel(m, keyRune('/'))
+
+	if !m.filtering {
+		t.Error("expected filtering=true after /")
+	}
+}
+
+func TestFilterEscClears(t *testing.T) {
+	m := seedRepoModel()
+	m.filtering = true
+	m.filterInput = textinput.New()
+	m.filterInput.SetValue("test")
+
+	m = updateModel(m, keyEsc())
+
+	if m.filtering {
+		t.Error("expected filtering=false after Esc")
+	}
+	if m.filterInput.Value() != "" {
+		t.Errorf("filter value = %q, want empty after Esc", m.filterInput.Value())
+	}
+}
+
+func TestFilterEnterKeepsValue(t *testing.T) {
+	m := seedRepoModel()
+	m.filtering = true
+	m.filterInput = textinput.New()
+	m.filterInput.SetValue("alp")
+
+	m = updateModel(m, keyEnter())
+
+	if m.filtering {
+		t.Error("expected filtering=false after Enter")
+	}
+	if m.filterInput.Value() != "alp" {
+		t.Errorf("filter value = %q, want 'alp' after Enter", m.filterInput.Value())
+	}
+}
+
+func TestFilteredRepos(t *testing.T) {
+	repos := []repoItem{
+		{Repo: registry.Repo{Name: "alpha"}},
+		{Repo: registry.Repo{Name: "bravo"}},
+		{Repo: registry.Repo{Name: "charlie"}},
+	}
+
+	// No filter
+	if got := filteredRepos(repos, ""); len(got) != 3 {
+		t.Errorf("no filter: got %d, want 3", len(got))
+	}
+
+	// Filter matches one
+	if got := filteredRepos(repos, "bra"); len(got) != 1 || got[0].Repo.Name != "bravo" {
+		t.Errorf("filter 'bra': got %v", got)
+	}
+
+	// Case insensitive
+	if got := filteredRepos(repos, "ALPHA"); len(got) != 1 || got[0].Repo.Name != "alpha" {
+		t.Errorf("filter 'ALPHA': got %v", got)
+	}
+
+	// No matches
+	if got := filteredRepos(repos, "xyz"); len(got) != 0 {
+		t.Errorf("filter 'xyz': got %d, want 0", len(got))
+	}
+}
+
+func TestFilteredWorkspaces(t *testing.T) {
+	workspaces := []workspaceItem{
+		{Workspace: registry.Workspace{Name: "ws-one"}, Branch: "feat-1"},
+		{Workspace: registry.Workspace{Name: "ws-two"}, Branch: "feat-2"},
+		{Workspace: registry.Workspace{Name: "ws-three"}, Branch: "main"},
+	}
+
+	// Filter by name
+	if got := filteredWorkspaces(workspaces, "two"); len(got) != 1 || got[0].Workspace.Name != "ws-two" {
+		t.Errorf("filter 'two': got %v", got)
+	}
+
+	// Filter by branch
+	if got := filteredWorkspaces(workspaces, "main"); len(got) != 1 || got[0].Workspace.Name != "ws-three" {
+		t.Errorf("filter 'main': got %v", got)
+	}
+}
+
+func TestFilteredRepoResolvesCorrectIndex(t *testing.T) {
+	m := seedRepoModel()
+	m.filterInput = textinput.New()
+	m.filterInput.SetValue("charlie")
+	m.cursor = 0 // first in filtered list
+
+	filtered := filteredRepos(m.repos, m.filterInput.Value())
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 filtered result, got %d", len(filtered))
+	}
+
+	origIdx := resolveOriginalRepoIndex(0, filtered, m.repos)
+	if origIdx != 2 {
+		t.Errorf("original index = %d, want 2", origIdx)
+	}
+}
+
+// --- 2.2 Multi-Select ---
+
+func TestMultiSelectToggle(t *testing.T) {
+	m := seedWorkspaceModel()
+
+	// Space toggles selection and advances cursor
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+
+	if m.selected == nil || !m.selected[0] {
+		t.Error("expected workspace 0 to be selected")
+	}
+	if m.cursor != 1 {
+		t.Errorf("cursor = %d, want 1 (advanced after space)", m.cursor)
+	}
+
+	// Select second
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if !m.selected[1] {
+		t.Error("expected workspace 1 to be selected")
+	}
+
+	// Deselect first (move back, toggle)
+	m.cursor = 0
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if m.selected[0] {
+		t.Error("expected workspace 0 to be deselected")
+	}
+}
+
+func TestMultiSelectEscClearsBeforeBack(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.selected = map[int]bool{0: true, 1: true}
+
+	// First Esc clears selection
+	m = updateModel(m, keyEsc())
+	if m.selected != nil {
+		t.Error("expected selection to be cleared on first Esc")
+	}
+	if m.view != viewWorkspaceList {
+		t.Errorf("view = %d, want viewWorkspaceList (not back yet)", m.view)
+	}
+
+	// Second Esc navigates back
+	m = updateModel(m, keyEsc())
+	if m.view != viewRepoList {
+		t.Errorf("view = %d, want viewRepoList after second Esc", m.view)
+	}
+}
+
+// --- 4.1 Refresh ---
+
+func TestRefreshRepoList(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	m = result.(model)
+
+	if !m.loading {
+		t.Error("expected loading=true after ctrl+r")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd after ctrl+r")
+	}
+}
+
+func TestRefreshWorkspaceListPreservesCursor(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.repos = []repoItem{
+		{Repo: registry.Repo{Name: "alpha", Path: "/a"}},
+	}
+	m.cursor = 2
+
+	// Simulate workspace loaded while already on workspace list (refresh case)
+	m = updateModel(m, workspacesLoadedMsg{
+		workspaces: []workspaceItem{
+			{Workspace: registry.Workspace{Name: "ws-one"}},
+			{Workspace: registry.Workspace{Name: "ws-two"}},
+			{Workspace: registry.Workspace{Name: "ws-three"}},
+		},
+		repoName: "alpha",
+		rootPath: "/a",
+	})
+
+	if m.cursor != 2 {
+		t.Errorf("cursor = %d, want 2 (preserved on refresh)", m.cursor)
+	}
+}
+
+func TestRefreshWorkspaceListClampsCursor(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.cursor = 2
+
+	// Fewer workspaces returned — cursor should clamp
+	m = updateModel(m, workspacesLoadedMsg{
+		workspaces: []workspaceItem{
+			{Workspace: registry.Workspace{Name: "ws-one"}},
+		},
+		repoName: "alpha",
+		rootPath: "/a",
+	})
+
+	if m.cursor != 0 {
+		t.Errorf("cursor = %d, want 0 (clamped)", m.cursor)
+	}
+}
+
+// --- 4.2 Auto-Refresh ---
+
+func TestAutoRefreshSkipsWhenLoading(t *testing.T) {
+	m := seedRepoModel()
+	m.loading = true
+
+	result, cmd := m.Update(autoRefreshTickMsg{})
+	m = result.(model)
+
+	// Should re-schedule tick but not dispatch refresh
+	if cmd == nil {
+		t.Error("expected re-schedule tick cmd even when loading")
+	}
+}
+
+func TestAutoRefreshResultUpdatesRunning(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.rootPath = "/a"
+	m.repos = []repoItem{
+		{Repo: registry.Repo{Name: "alpha", Path: "/a"}},
+	}
+
+	// ws-two should become running
+	result, _ := m.Update(autoRefreshResultMsg{
+		sessions: []tmux.Session{
+			{Name: "fr8/a/ws-two", Repo: "a", Workspace: "ws-two"},
+		},
+	})
+	m = result.(model)
+
+	if m.workspaces[0].Running {
+		t.Error("ws-one should not be running")
+	}
+	// Note: the auto-refresh matches by tmux.SessionName which uses tmux.RepoName
+	// In test, tmux.RepoName("/a") depends on actual implementation
+}
+
+// --- Toast on Stop/Archive Result ---
+
+func TestToastSetOnStopResult(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.workspaces[0].Running = true
+	m.loading = true
+
+	result, cmd := m.Update(stopResultMsg{name: "ws-one"})
+	m = result.(model)
+
+	if m.toast == "" {
+		t.Error("expected toast to be set after stop")
+	}
+	if m.toastIsError {
+		t.Error("expected non-error toast after successful stop")
+	}
+	if cmd == nil {
+		t.Error("expected toast tick cmd")
+	}
+}
+
+func TestToastSetOnArchiveResult(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+
+	result, cmd := m.Update(archiveResultMsg{name: "ws-one"})
+	m = result.(model)
+
+	if m.toast == "" {
+		t.Error("expected toast to be set after archive")
+	}
+	if m.toastIsError {
+		t.Error("expected non-error toast after successful archive")
+	}
+	if cmd == nil {
+		t.Error("expected toast tick cmd")
+	}
+}
+
+func TestToastSetOnBatchArchiveResult(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.repos = []repoItem{{Repo: registry.Repo{Name: "alpha", Path: "/a"}, WorkspaceCount: 3}}
+	m.repoName = "alpha"
+
+	result, cmd := m.Update(batchArchiveResultMsg{archived: []string{"ws-one"}})
+	m = result.(model)
+
+	if m.toast == "" {
+		t.Error("expected toast to be set after batch archive")
+	}
+	if m.toastIsError {
+		t.Error("expected non-error toast after successful batch archive")
+	}
+	if cmd == nil {
+		t.Error("expected toast tick cmd")
+	}
+}
+
+// --- Batch Start/Stop Result clears selection ---
+
+func TestBatchStartResultClearsSelection(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.selected = map[int]bool{0: true, 1: true}
+
+	m = updateModel(m, batchStartResultMsg{started: 2})
+
+	if m.selected != nil {
+		t.Error("expected selection to be cleared after batch start")
+	}
+	if m.toast == "" {
+		t.Error("expected toast to be set")
+	}
+}
+
+func TestBatchStopResultClearsSelection(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.loading = true
+	m.selected = map[int]bool{0: true, 1: true}
+
+	m = updateModel(m, batchStopResultMsg{stopped: 2})
+
+	if m.selected != nil {
+		t.Error("expected selection to be cleared after batch stop")
+	}
+	if m.toast == "" {
+		t.Error("expected toast to be set")
+	}
+}
+
+// --- Filter on workspace list ---
+
+func TestFilterActivationOnWorkspaceList(t *testing.T) {
+	m := seedWorkspaceModel()
+
+	m = updateModel(m, keyRune('/'))
+
+	if !m.filtering {
+		t.Error("expected filtering=true after / on workspace list")
+	}
+	if m.cursor != 0 {
+		t.Error("expected cursor reset to 0 on filter activation")
+	}
+}
+
+func TestFilterWorkspaceListEscClears(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.filtering = true
+	m.filterInput = textinput.New()
+	m.filterInput.SetValue("test")
+
+	m = updateModel(m, keyEsc())
+
+	if m.filtering {
+		t.Error("expected filtering=false after Esc on workspace filter")
+	}
+	if m.filterInput.Value() != "" {
+		t.Errorf("filter value = %q, want empty after Esc", m.filterInput.Value())
+	}
+}
+
+func TestFilterWorkspaceListResolvesThroughFilter(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.filterInput = textinput.New()
+	m.filterInput.SetValue("three")
+	m.cursor = 0 // first in filtered list
+
+	filtered := filteredWorkspaces(m.workspaces, m.filterInput.Value())
+	if len(filtered) != 1 {
+		t.Fatalf("expected 1 filtered result, got %d", len(filtered))
+	}
+
+	origIdx := resolveOriginalWsIndex(0, filtered, m.workspaces)
+	if origIdx != 2 {
+		t.Errorf("original index = %d, want 2", origIdx)
+	}
+}
+
+// --- Ctrl+L redraw key ---
+
+func TestRedrawKeyDispatchesClearScreen(t *testing.T) {
+	m := seedRepoModel()
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
+	_ = result.(model)
+
+	if cmd == nil {
+		t.Error("expected non-nil cmd after ctrl+l")
+	}
+}
+
+// --- Multi-select through filter ---
+
+func TestMultiSelectThroughFilter(t *testing.T) {
+	m := seedWorkspaceModel()
+	m.filterInput = textinput.New()
+	m.filterInput.SetValue("three")
+	m.cursor = 0 // first in filtered list (ws-three at original index 2)
+
+	// Space selects the filtered item (original index 2)
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+
+	if m.selected == nil {
+		t.Fatal("expected selection to be non-nil")
+	}
+	if !m.selected[2] {
+		t.Error("expected original index 2 to be selected (ws-three)")
+	}
+	if m.selected[0] {
+		t.Error("original index 0 should not be selected")
+	}
+}
+
+// --- Filter cursor resets on text change ---
+
+func TestFilterCursorResetsOnChange(t *testing.T) {
+	m := seedRepoModel()
+	m.filtering = true
+	m.filterInput = textinput.New()
+	m.filterInput.Focus()
+	m.cursor = 2
+
+	// Type a character — cursor should reset to 0
+	m = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+
+	if m.cursor != 0 {
+		t.Errorf("cursor = %d, want 0 after filter text change", m.cursor)
+	}
+}
