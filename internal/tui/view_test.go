@@ -3,8 +3,11 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/protocollar/fr8/internal/gh"
+	"github.com/protocollar/fr8/internal/git"
 )
 
 func TestFormatStatus(t *testing.T) {
@@ -20,9 +23,27 @@ func TestFormatStatus(t *testing.T) {
 			contains: []string{"clean"},
 		},
 		{
-			name:     "dirty",
-			item:     workspaceItem{Dirty: true},
-			contains: []string{"dirty"},
+			name:     "dirty modified",
+			item:     workspaceItem{DirtyCount: git.DirtyCount{Modified: 1}},
+			contains: []string{"1~"},
+			excludes: []string{"clean"},
+		},
+		{
+			name:     "dirty staged",
+			item:     workspaceItem{DirtyCount: git.DirtyCount{Staged: 2}},
+			contains: []string{"2\u2191"},
+			excludes: []string{"clean"},
+		},
+		{
+			name:     "dirty untracked",
+			item:     workspaceItem{DirtyCount: git.DirtyCount{Untracked: 3}},
+			contains: []string{"3?"},
+			excludes: []string{"clean"},
+		},
+		{
+			name:     "dirty mixed",
+			item:     workspaceItem{DirtyCount: git.DirtyCount{Staged: 2, Modified: 3, Untracked: 1}},
+			contains: []string{"2\u2191", "3~", "1?"},
 			excludes: []string{"clean"},
 		},
 		{
@@ -51,8 +72,26 @@ func TestFormatStatus(t *testing.T) {
 		},
 		{
 			name:     "dirty and merged",
-			item:     workspaceItem{Dirty: true, Merged: true},
-			contains: []string{"dirty", "merged"},
+			item:     workspaceItem{DirtyCount: git.DirtyCount{Modified: 1}, Merged: true},
+			contains: []string{"1~", "merged"},
+			excludes: []string{"clean"},
+		},
+		{
+			name:     "with PR",
+			item:     workspaceItem{PR: &gh.PRInfo{Number: 42, State: "OPEN"}},
+			contains: []string{"PR #42"},
+			excludes: []string{"clean"},
+		},
+		{
+			name:     "with draft PR",
+			item:     workspaceItem{PR: &gh.PRInfo{Number: 10, State: "OPEN", IsDraft: true}},
+			contains: []string{"PR #10", "draft"},
+			excludes: []string{"clean"},
+		},
+		{
+			name:     "with approved PR",
+			item:     workspaceItem{PR: &gh.PRInfo{Number: 5, State: "OPEN", ReviewDecision: "APPROVED"}},
+			contains: []string{"PR #5", "\u2713"},
 			excludes: []string{"clean"},
 		},
 		{
@@ -195,6 +234,28 @@ func TestRenderTitledPanelAlignment(t *testing.T) {
 		if w != 40 {
 			t.Errorf("line %d: width = %d, want 40: %q", i, w, line)
 		}
+	}
+}
+
+func TestRelativeTime(t *testing.T) {
+	tests := []struct {
+		name string
+		ago  time.Duration
+		want string
+	}{
+		{"just now", 5 * time.Second, "just now"},
+		{"minutes", 5 * time.Minute, "5m ago"},
+		{"hours", 3 * time.Hour, "3h ago"},
+		{"days", 48 * time.Hour, "2d ago"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := relativeTime(time.Now().Add(-tt.ago))
+			if got != tt.want {
+				t.Errorf("relativeTime() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

@@ -85,8 +85,8 @@ func runList(cmd *cobra.Command, args []string) error {
 				continue
 			}
 			if listDirty {
-				dirty, _ := git.HasUncommittedChanges(ws.Path)
-				if !dirty {
+				dc, _ := git.DirtyStatus(ws.Path)
+				if !dc.Dirty() {
 					continue
 				}
 			}

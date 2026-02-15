@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Worktree represents a git worktree entry.
@@ -116,6 +117,73 @@ func HasUncommittedChanges(dir string) (bool, error) {
 		return false, fmt.Errorf("git status: %w", err)
 	}
 	return strings.TrimSpace(out) != "", nil
+}
+
+// DirtyCount holds counts of staged, modified, and untracked files.
+type DirtyCount struct {
+	Staged    int `json:"staged"`
+	Modified  int `json:"modified"`
+	Untracked int `json:"untracked"`
+}
+
+// Dirty returns true if any files are staged, modified, or untracked.
+func (d DirtyCount) Dirty() bool {
+	return d.Staged > 0 || d.Modified > 0 || d.Untracked > 0
+}
+
+// DirtyStatus parses git status --porcelain output and returns file counts.
+func DirtyStatus(dir string) (DirtyCount, error) {
+	out, err := run(dir, "status", "--porcelain")
+	if err != nil {
+		return DirtyCount{}, fmt.Errorf("git status: %w", err)
+	}
+
+	var dc DirtyCount
+	for _, line := range strings.Split(out, "\n") {
+		if len(line) < 2 {
+			continue
+		}
+		if line[:2] == "??" {
+			dc.Untracked++
+			continue
+		}
+		if line[0] != ' ' && line[0] != '?' {
+			dc.Staged++
+		}
+		if line[1] != ' ' && line[1] != '?' {
+			dc.Modified++
+		}
+	}
+	return dc, nil
+}
+
+// CommitInfo holds summary information about a commit.
+type CommitInfo struct {
+	Subject string    `json:"subject"`
+	Time    time.Time `json:"time"`
+}
+
+// LastCommit returns the subject and timestamp of the most recent commit.
+func LastCommit(dir string) (CommitInfo, error) {
+	out, err := run(dir, "log", "-1", "--format=%s|||%ct")
+	if err != nil {
+		return CommitInfo{}, fmt.Errorf("git log: %w", err)
+	}
+
+	parts := strings.SplitN(strings.TrimSpace(out), "|||", 2)
+	if len(parts) != 2 {
+		return CommitInfo{}, fmt.Errorf("unexpected git log output: %q", out)
+	}
+
+	ts, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return CommitInfo{}, fmt.Errorf("parsing commit timestamp: %w", err)
+	}
+
+	return CommitInfo{
+		Subject: parts[0],
+		Time:    time.Unix(ts, 0),
+	}, nil
 }
 
 // IsInsideWorkTree returns true if dir is inside a git repository.

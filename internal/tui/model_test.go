@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/opener"
 	"github.com/protocollar/fr8/internal/registry"
 	"github.com/protocollar/fr8/internal/state"
@@ -913,7 +914,7 @@ func TestBatchArchiveFiltersToMergedClean(t *testing.T) {
 	m := seedWorkspaceModel()
 	m.workspaces[0].Merged = true // ws-one: merged + clean
 	m.workspaces[1].Merged = true
-	m.workspaces[1].Dirty = true // ws-two: merged + dirty (excluded)
+	m.workspaces[1].DirtyCount = git.DirtyCount{Modified: 1} // ws-two: merged + dirty (excluded)
 	// ws-three: not merged (excluded)
 
 	m = updateModel(m, keyRune('A'))

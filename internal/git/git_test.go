@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestParsePorcelain(t *testing.T) {
@@ -397,6 +398,141 @@ func TestTrackingBranchIntegration(t *testing.T) {
 	_, err = TrackingBranch(dir, "no-upstream")
 	if err == nil {
 		t.Error("expected error for branch with no upstream")
+	}
+}
+
+func TestDirtyStatusClean(t *testing.T) {
+	dir := initTestRepo(t)
+	dc, err := DirtyStatus(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dc.Dirty() {
+		t.Errorf("expected clean, got %+v", dc)
+	}
+}
+
+func TestDirtyStatusUntracked(t *testing.T) {
+	dir := initTestRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	dc, err := DirtyStatus(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dc.Untracked != 1 {
+		t.Errorf("Untracked = %d, want 1", dc.Untracked)
+	}
+	if dc.Staged != 0 || dc.Modified != 0 {
+		t.Errorf("expected only untracked, got %+v", dc)
+	}
+}
+
+func TestDirtyStatusStaged(t *testing.T) {
+	dir := initTestRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "staged.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "staged.txt")
+	dc, err := DirtyStatus(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dc.Staged != 1 {
+		t.Errorf("Staged = %d, want 1", dc.Staged)
+	}
+	if dc.Modified != 0 || dc.Untracked != 0 {
+		t.Errorf("expected only staged, got %+v", dc)
+	}
+}
+
+func TestDirtyStatusModified(t *testing.T) {
+	dir := initTestRepo(t)
+	// Create a tracked file
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "tracked.txt")
+	runGit(t, dir, "commit", "-m", "add tracked")
+	// Modify the tracked file
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("modified"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	dc, err := DirtyStatus(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dc.Modified != 1 {
+		t.Errorf("Modified = %d, want 1", dc.Modified)
+	}
+	if dc.Staged != 0 || dc.Untracked != 0 {
+		t.Errorf("expected only modified, got %+v", dc)
+	}
+}
+
+func TestDirtyStatusMixed(t *testing.T) {
+	dir := initTestRepo(t)
+	// Staged file
+	if err := os.WriteFile(filepath.Join(dir, "staged.txt"), []byte("s"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "staged.txt")
+
+	// Modified tracked file
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("t"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "tracked.txt")
+	runGit(t, dir, "commit", "-m", "add tracked")
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("mod"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Untracked file
+	if err := os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("u"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	dc, err := DirtyStatus(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Note: staged.txt was committed by the commit above, so it's no longer staged.
+	// We need a fresh staged file.
+	if err := os.WriteFile(filepath.Join(dir, "staged2.txt"), []byte("s2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "staged2.txt")
+
+	dc, err = DirtyStatus(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dc.Staged != 1 {
+		t.Errorf("Staged = %d, want 1", dc.Staged)
+	}
+	if dc.Modified != 1 {
+		t.Errorf("Modified = %d, want 1", dc.Modified)
+	}
+	if dc.Untracked != 1 {
+		t.Errorf("Untracked = %d, want 1", dc.Untracked)
+	}
+}
+
+func TestLastCommitIntegration(t *testing.T) {
+	dir := initTestRepo(t)
+	// The init commit has subject "init" from initTestRepo
+	ci, err := LastCommit(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ci.Subject != "init" {
+		t.Errorf("Subject = %q, want %q", ci.Subject, "init")
+	}
+	// Commit time should be recent (within last 60 seconds)
+	if time.Since(ci.Time) > 60*time.Second {
+		t.Errorf("commit time %v is too old", ci.Time)
 	}
 }
 

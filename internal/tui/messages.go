@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"github.com/protocollar/fr8/internal/gh"
+	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/opener"
 	"github.com/protocollar/fr8/internal/registry"
 	"github.com/protocollar/fr8/internal/state"
@@ -28,14 +30,18 @@ type repoItem struct {
 
 // workspaceItem is a workspace with live git status.
 type workspaceItem struct {
-	Workspace state.Workspace
-	Dirty     bool
-	Merged    bool
-	Ahead     int
-	Behind    int
-	PortFree  bool // true when nothing is listening on the workspace port
-	Running   bool // true when a tmux session is active for this workspace
-	StatusErr error
+	Workspace     state.Workspace
+	DirtyCount    git.DirtyCount  // staged/modified/untracked counts
+	Merged        bool
+	Ahead         int             // ahead of upstream tracking branch
+	Behind        int             // behind upstream tracking branch
+	DefaultAhead  int             // ahead of default branch
+	DefaultBehind int             // behind default branch
+	LastCommit    *git.CommitInfo // nil if unavailable
+	PR            *gh.PRInfo      // nil if no PR / gh unavailable
+	PortFree      bool            // true when nothing is listening on the workspace port
+	Running       bool            // true when a tmux session is active for this workspace
+	StatusErr     error
 }
 
 // Messages for async operations.
@@ -46,11 +52,12 @@ type reposLoadedMsg struct {
 }
 
 type workspacesLoadedMsg struct {
-	workspaces []workspaceItem
-	repoName   string
-	rootPath   string
-	commonDir  string
-	err        error
+	workspaces    []workspaceItem
+	repoName      string
+	rootPath      string
+	commonDir     string
+	defaultBranch string
+	err           error
 }
 
 type archiveResultMsg struct {
