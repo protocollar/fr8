@@ -69,6 +69,7 @@ func runArchive(cmd *cobra.Command, args []string) error {
 	// Dry run: just report what would happen
 	if archiveDryRun {
 		dirty, _ := git.HasUncommittedChanges(ws.Path)
+		branch, _ := git.CurrentBranch(ws.Path)
 		result := struct {
 			Action    string `json:"action"`
 			Workspace struct {
@@ -82,7 +83,7 @@ func runArchive(cmd *cobra.Command, args []string) error {
 			ScriptName string `json:"archive_script,omitempty"`
 		}{Action: "dry_run"}
 		result.Workspace.Name = ws.Name
-		result.Workspace.Branch = ws.Branch
+		result.Workspace.Branch = branch
 		result.Workspace.Port = ws.Port
 		result.Workspace.Path = ws.Path
 		result.Dirty = dirty
@@ -95,7 +96,7 @@ func runArchive(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("Dry run — would archive workspace %q:\n", ws.Name)
 		fmt.Printf("  Path:     %s\n", ws.Path)
-		fmt.Printf("  Branch:   %s\n", ws.Branch)
+		fmt.Printf("  Branch:   %s\n", branch)
 		fmt.Printf("  Port:     %d\n", ws.Port)
 		if dirty {
 			fmt.Printf("  Status:   dirty (uncommitted changes)\n")
@@ -136,6 +137,9 @@ func runArchive(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
+
+	// Capture branch before worktree removal
+	branch, _ := git.CurrentBranch(ws.Path)
 
 	// Auto-stop tmux session if running
 	if tmux.Available() == nil {
@@ -187,7 +191,7 @@ func runArchive(cmd *cobra.Command, args []string) error {
 				Branch string `json:"branch"`
 				Port   int    `json:"port"`
 				Path   string `json:"path"`
-			}{Name: ws.Name, Branch: ws.Branch, Port: ws.Port, Path: ws.Path},
+			}{Name: ws.Name, Branch: branch, Port: ws.Port, Path: ws.Path},
 		})
 	}
 

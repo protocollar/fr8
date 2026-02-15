@@ -245,19 +245,28 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 		planned := state.Workspace{
 			Name:      wsName,
 			Path:      wsPath,
-			Branch:    branch,
 			Port:      allocatedPort,
 			CreatedAt: time.Now().UTC(),
 		}
 		if jsonout.Enabled {
 			return &planned, jsonout.Write(struct {
-				Action    string          `json:"action"`
-				Workspace state.Workspace `json:"workspace"`
-			}{Action: "dry_run", Workspace: planned})
+				Action    string `json:"action"`
+				Workspace struct {
+					Name   string `json:"name"`
+					Path   string `json:"path"`
+					Branch string `json:"branch"`
+					Port   int    `json:"port"`
+				} `json:"workspace"`
+			}{Action: "dry_run", Workspace: struct {
+				Name   string `json:"name"`
+				Path   string `json:"path"`
+				Branch string `json:"branch"`
+				Port   int    `json:"port"`
+			}{Name: planned.Name, Path: planned.Path, Branch: branch, Port: planned.Port}})
 		}
 		fmt.Printf("Dry run — would create workspace:\n")
 		fmt.Printf("  Name:   %s\n", planned.Name)
-		fmt.Printf("  Branch: %s\n", planned.Branch)
+		fmt.Printf("  Branch: %s\n", branch)
 		fmt.Printf("  Port:   %d-%d\n", planned.Port, planned.Port+cfg.PortRange-1)
 		fmt.Printf("  Path:   %s\n", planned.Path)
 		return &planned, nil
@@ -276,7 +285,6 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 	ws := state.Workspace{
 		Name:      wsName,
 		Path:      wsPath,
-		Branch:    branch,
 		Port:      allocatedPort,
 		CreatedAt: time.Now().UTC(),
 	}
@@ -313,16 +321,26 @@ func createWorkspace(rootPath, commonDir, wsName, branch string, trackRemote, ru
 
 	if jsonout.Enabled {
 		return &ws, jsonout.Write(struct {
-			Action    string          `json:"action"`
-			Workspace state.Workspace `json:"workspace"`
-		}{Action: "created", Workspace: ws})
+			Action    string `json:"action"`
+			Workspace struct {
+				Name   string `json:"name"`
+				Path   string `json:"path"`
+				Branch string `json:"branch"`
+				Port   int    `json:"port"`
+			} `json:"workspace"`
+		}{Action: "created", Workspace: struct {
+			Name   string `json:"name"`
+			Path   string `json:"path"`
+			Branch string `json:"branch"`
+			Port   int    `json:"port"`
+		}{Name: ws.Name, Path: ws.Path, Branch: branch, Port: ws.Port}})
 	}
 
 	// Print summary
 	fmt.Println()
 	fmt.Printf("Workspace created:\n")
 	fmt.Printf("  Name:   %s\n", ws.Name)
-	fmt.Printf("  Branch: %s\n", ws.Branch)
+	fmt.Printf("  Branch: %s\n", branch)
 	fmt.Printf("  Ports:  %d-%d (%d ports)\n", ws.Port, ws.Port+cfg.PortRange-1, cfg.PortRange)
 	fmt.Printf("  Path:   %s\n", shortenHomePath(ws.Path))
 

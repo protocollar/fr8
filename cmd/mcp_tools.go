@@ -264,6 +264,8 @@ func handleWorkspaceList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 				running = tmux.IsRunning(sessionName)
 			}
 
+			branch, _ := git.CurrentBranch(ws.Path)
+
 			if hasFilters {
 				if filterRunning && !running {
 					continue
@@ -275,7 +277,7 @@ func handleWorkspaceList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 					}
 				}
 				if filterMerged && defaultBranch != "" {
-					merged, _ := git.IsMerged(ws.Path, ws.Branch, defaultBranch)
+					merged, _ := git.IsMerged(ws.Path, branch, defaultBranch)
 					if !merged {
 						continue
 					}
@@ -285,7 +287,7 @@ func handleWorkspaceList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 			items = append(items, workspaceListItem{
 				Repo:      r.Name,
 				Name:      ws.Name,
-				Branch:    ws.Branch,
+				Branch:    branch,
 				Port:      ws.Port,
 				Path:      ws.Path,
 				Running:   running,
@@ -311,9 +313,6 @@ func handleWorkspaceStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 
 	defaultBranch, _ := git.DefaultBranch(rootPath)
 	branch, _ := git.CurrentBranch(ws.Path)
-	if branch == "" {
-		branch = ws.Branch
-	}
 
 	dc, _ := git.DirtyStatus(ws.Path)
 	lastCommit, _ := git.LastCommit(ws.Path)
@@ -438,6 +437,9 @@ func handleWorkspaceArchive(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 		return mcpError(fmt.Sprintf("loading state: %v", err))
 	}
 
+	// Capture branch before worktree removal
+	branch, _ := git.CurrentBranch(ws.Path)
+
 	// Safety: check for uncommitted changes
 	if !force {
 		dirty, _ := git.HasUncommittedChanges(ws.Path)
@@ -485,7 +487,7 @@ func handleWorkspaceArchive(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 			Branch string `json:"branch"`
 			Port   int    `json:"port"`
 			Path   string `json:"path"`
-		}{Name: ws.Name, Branch: ws.Branch, Port: ws.Port, Path: ws.Path},
+		}{Name: ws.Name, Branch: branch, Port: ws.Port, Path: ws.Path},
 	})
 }
 

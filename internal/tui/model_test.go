@@ -35,9 +35,9 @@ func seedWorkspaceModel() model {
 		rootPath: "/a",
 		commonDir: "/a/.git",
 		workspaces: []workspaceItem{
-			{Workspace: state.Workspace{Name: "ws-one", Branch: "feat-1", Port: 3000}},
-			{Workspace: state.Workspace{Name: "ws-two", Branch: "feat-2", Port: 3010}},
-			{Workspace: state.Workspace{Name: "ws-three", Branch: "feat-3", Port: 3020}},
+			{Workspace: state.Workspace{Name: "ws-one", Port: 3000}, Branch: "feat-1"},
+			{Workspace: state.Workspace{Name: "ws-two", Port: 3010}, Branch: "feat-2"},
+			{Workspace: state.Workspace{Name: "ws-three", Port: 3020}, Branch: "feat-3"},
 		},
 		cursor: 0,
 	}
@@ -329,7 +329,7 @@ func TestWorkspacesLoadedMsg(t *testing.T) {
 	m := model{view: viewRepoList, loading: true}
 
 	workspaces := []workspaceItem{
-		{Workspace: state.Workspace{Name: "ws1", Branch: "feat", Port: 3000}},
+		{Workspace: state.Workspace{Name: "ws1", Port: 3000}, Branch: "feat"},
 	}
 
 	m = updateModel(m, workspacesLoadedMsg{
@@ -378,7 +378,7 @@ func TestArchiveLastWorkspaceClearsLoading(t *testing.T) {
 			{Repo: registry.Repo{Name: "alpha", Path: "/a"}, WorkspaceCount: 1},
 		},
 		workspaces: []workspaceItem{
-			{Workspace: state.Workspace{Name: "only-ws", Branch: "feat-1", Port: 3000}},
+			{Workspace: state.Workspace{Name: "only-ws", Port: 3000}, Branch: "feat-1"},
 		},
 		cursor: 0,
 	}

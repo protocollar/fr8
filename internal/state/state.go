@@ -22,7 +22,6 @@ type State struct {
 type Workspace struct {
 	Name      string    `json:"name"`
 	Path      string    `json:"path"`
-	Branch    string    `json:"branch"`
 	Port      int       `json:"port"`
 	CreatedAt time.Time `json:"created_at"`
 }

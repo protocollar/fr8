@@ -10,7 +10,7 @@ import (
 func TestAddAndFind(t *testing.T) {
 	s := &State{}
 
-	ws := Workspace{Name: "test-ws", Path: "/tmp/ws", Branch: "main", Port: 5000, CreatedAt: time.Now()}
+	ws := Workspace{Name: "test-ws", Path: "/tmp/ws", Port: 5000, CreatedAt: time.Now()}
 	if err := s.Add(ws); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 	original := &State{
 		Workspaces: []Workspace{
-			{Name: "ws1", Path: "/tmp/ws1", Branch: "main", Port: 5000, CreatedAt: now},
+			{Name: "ws1", Path: "/tmp/ws1", Port: 5000, CreatedAt: now},
 		},
 	}
 
@@ -244,8 +244,8 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Fatalf("expected 1 workspace, got %d", len(loaded.Workspaces))
 	}
 	ws := loaded.Workspaces[0]
-	if ws.Name != "ws1" || ws.Port != 5000 || ws.Branch != "main" {
-		t.Errorf("loaded workspace = %+v, want ws1/5000/main", ws)
+	if ws.Name != "ws1" || ws.Port != 5000 {
+		t.Errorf("loaded workspace = %+v, want ws1/5000", ws)
 	}
 }
 
