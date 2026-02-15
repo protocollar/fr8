@@ -22,8 +22,15 @@ func renderOpenerPicker(m model) string {
 		b.WriteString("\n\n")
 	}
 
+	listHeight := m.height - 8 // breadcrumb(2) + help(2) + margins
+	if listHeight < 3 {
+		listHeight = 3
+	}
+
 	var rows []string
-	for i, o := range m.openers {
+	start, end := scrollWindow(m.openerCursor, len(m.openers), listHeight)
+	for i := start; i < end; i++ {
+		o := m.openers[i]
 		name := o.Name
 		suffix := ""
 		if o.Command != o.Name {
@@ -43,7 +50,7 @@ func renderOpenerPicker(m model) string {
 		}
 	}
 
-	b.WriteString(renderTitledPanel("Open With", strings.Join(rows, "\n"), w))
+	b.WriteString(renderTitledPanelWithPos("Open With", strings.Join(rows, "\n"), w, m.openerCursor+1, len(m.openers), listHeight))
 	b.WriteString("\n\n")
 
 	b.WriteString(renderHelpBar([]helpItem{

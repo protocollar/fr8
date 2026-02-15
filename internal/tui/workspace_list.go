@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/protocollar/fr8/internal/gh"
 )
 
@@ -15,6 +16,12 @@ func renderWorkspaceList(m model) string {
 	// Breadcrumb
 	b.WriteString(renderBreadcrumb([]string{"fr8", m.repoName, "workspaces"}))
 	b.WriteString("\n\n")
+
+	// Status bar
+	if sb := renderStatusBar(m.repos, w); sb != "" {
+		b.WriteString(sb)
+		b.WriteString("\n")
+	}
 
 	if m.loading {
 		content := fmt.Sprintf("%s %s", m.spinner.View(), dimStyle.Render("Loading workspaces..."))
@@ -37,50 +44,45 @@ func renderWorkspaceList(m model) string {
 		return b.String()
 	}
 
+	// Apply filter
+	filtered := filteredWorkspaces(m.workspaces, m.filterInput.Value())
+
 	// List panel
-	listHeight := m.height - 10
+	listHeight := m.height - chromeHeight(m)
 	if listHeight < 3 {
 		listHeight = 3
 	}
 
-	var rows []string
-	start, end := scrollWindow(m.cursor, len(m.workspaces), listHeight)
-	for i := start; i < end; i++ {
-		item := m.workspaces[i]
-		status := formatStatus(item)
-		port := portStyle.Render(fmt.Sprintf(":%d", item.Workspace.Port))
-		name := item.Workspace.Name
-
-		runBadge := "  "
-		if item.Running {
-			runBadge = statusCleanStyle.Render("▶ ")
-		}
-
-		nameWidth := 24
-		var line string
-		if i == m.cursor {
-			line = fmt.Sprintf("%s %s%s  %s  %s",
-				cursorStyle.Render("▸"),
-				runBadge,
-				selectedRowStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)),
-				port,
-				status,
-			)
-		} else {
-			line = fmt.Sprintf("  %s%s  %s  %s",
-				runBadge,
-				normalRowStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)),
-				port,
-				status,
-			)
-		}
-		rows = append(rows, line)
+	listW := w
+	if isWide(w) {
+		listW = w * 3 / 5
 	}
 
-	b.WriteString(renderTitledPanel("Workspaces", strings.Join(rows, "\n"), w))
-	b.WriteString("\n")
+	var rows []string
+	start, end := scrollWindow(m.cursor, len(filtered), listHeight)
+	for i := start; i < end; i++ {
+		item := filtered[i]
+		origIdx := resolveOriginalWsIndex(i, filtered, m.workspaces)
+		rows = append(rows, renderWorkspaceRow(item, i, m.cursor, origIdx, m.selected, listW))
+	}
 
-	// Detail pane or archive confirmation
+	// Filter indicator
+	filterQuery := m.filterInput.Value()
+	if m.filtering {
+		rows = append([]string{m.filterInput.View()}, rows...)
+	} else if filterQuery != "" {
+		rows = append([]string{filterActiveStyle.Render("filter: " + filterQuery)}, rows...)
+	}
+
+	listPanel := renderTitledPanelWithPos("Workspaces", strings.Join(rows, "\n"), listW, m.cursor+1, len(filtered), listHeight)
+
+	// Detail pane or confirmation
+	var detailPanel string
+	detailW := w
+	if isWide(w) {
+		detailW = w - listW
+	}
+
 	switch {
 	case m.view == viewConfirmArchive && m.archiveIdx < len(m.workspaces):
 		ws := m.workspaces[m.archiveIdx]
@@ -96,7 +98,7 @@ func renderWorkspaceList(m model) string {
 				"  " +
 				helpKeyStyle.Render("n") + " " + helpDescStyle.Render("no"),
 		)
-		b.WriteString(renderTitledPanel("Confirm", detail.String(), w))
+		detailPanel = renderTitledPanel("Confirm", detail.String(), detailW)
 	case m.view == viewConfirmBatchArchive && len(m.batchArchiveNames) > 0:
 		var detail strings.Builder
 		detail.WriteString(confirmStyle.Render(fmt.Sprintf("Archive %d merged+clean workspaces?", len(m.batchArchiveNames))))
@@ -110,9 +112,10 @@ func renderWorkspaceList(m model) string {
 				"  " +
 				helpKeyStyle.Render("n") + " " + helpDescStyle.Render("no"),
 		)
-		b.WriteString(renderTitledPanel("Confirm Batch Archive", detail.String(), w))
-	case m.cursor < len(m.workspaces):
-		item := m.workspaces[m.cursor]
+		detailPanel = renderTitledPanel("Confirm Batch Archive", detail.String(), detailW)
+	case m.cursor < len(filtered):
+		origIdx := resolveOriginalWsIndex(m.cursor, filtered, m.workspaces)
+		item := m.workspaces[origIdx]
 		var detail strings.Builder
 		detail.WriteString(renderDetailRow("Branch", item.Branch))
 		detail.WriteString("\n")
@@ -141,13 +144,34 @@ func renderWorkspaceList(m model) string {
 			detail.WriteString("\n")
 			detail.WriteString(renderDetailRow("PR", formatPR(item.PR)))
 		}
-		b.WriteString(renderTitledPanel("Details", detail.String(), w))
+		detailPanel = renderTitledPanel("Details", detail.String(), detailW)
 	}
-	b.WriteString("\n")
+
+	if isWide(w) && detailPanel != "" {
+		lp := constrainWidth(listPanel, listW)
+		dp := constrainWidth(detailPanel, w-listW)
+		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, lp, dp))
+		b.WriteString("\n")
+	} else {
+		b.WriteString(listPanel)
+		b.WriteString("\n")
+		if detailPanel != "" {
+			b.WriteString(detailPanel)
+		}
+		b.WriteString("\n")
+	}
+
+	// Toast
+	if t := renderToast(m.toast, m.toastIsError, w); t != "" {
+		b.WriteString(t)
+		b.WriteString("\n")
+	}
 
 	// Help bar
-	b.WriteString(renderHelpBar([]helpItem{
+	helpItems := []helpItem{
 		{"n", "new"},
+		{"/", "filter"},
+		{"space", "select"},
 		{"r", "run"},
 		{"x", "stop"},
 		{"t", "attach"},
@@ -156,13 +180,90 @@ func renderWorkspaceList(m model) string {
 		{"b", "browser"},
 		{"a", "archive"},
 		{"A", "archive merged"},
+		{"ctrl+r", "refresh"},
 		{"?", "help"},
 		{"esc", "back"},
 		{"q", "quit"},
-	}, w))
+	}
+	b.WriteString(renderHelpBar(helpItems, w))
 	b.WriteString("\n")
 
 	return b.String()
+}
+
+// renderWorkspaceRow renders a single workspace row with optional selection marker,
+// branch name, and compact time.
+func renderWorkspaceRow(item workspaceItem, displayIdx, cursor, origIdx int, selected map[int]bool, width int) string {
+	status := formatStatus(item)
+	port := portStyle.Render(fmt.Sprintf(":%d", item.Workspace.Port))
+	name := item.Workspace.Name
+
+	runBadge := "  "
+	if item.Running {
+		runBadge = statusCleanStyle.Render("▶ ")
+	}
+
+	// Selection marker
+	selPrefix := ""
+	if len(selected) > 0 {
+		if selected[origIdx] {
+			selPrefix = cursorStyle.Render("[*]") + " "
+		} else {
+			selPrefix = dimStyle.Render("[ ]") + " "
+		}
+	}
+
+	// Dynamic column widths based on available width
+	nameWidth := 16
+	branchWidth := 0
+	timeWidth := 0
+	innerAvail := width - 4 - 4 // panel borders + cursor prefix
+	if innerAvail > 60 {
+		branchWidth = 16
+		if innerAvail > 80 {
+			branchWidth = 20
+			nameWidth = 20
+		}
+		timeWidth = 4
+	}
+
+	// Branch (truncated, dim)
+	branchStr := ""
+	if branchWidth > 0 && item.Branch != "" {
+		br := truncate(item.Branch, branchWidth)
+		branchStr = "  " + dimStyle.Render(fmt.Sprintf("%-*s", branchWidth, br))
+	}
+
+	// Compact relative time
+	timeStr := ""
+	if timeWidth > 0 && item.LastCommit != nil {
+		timeStr = "  " + dimStyle.Render(shortRelativeTime(item.LastCommit.Time))
+	}
+
+	var line string
+	if displayIdx == cursor {
+		line = fmt.Sprintf("%s %s%s%s%s  %s  %s  %s",
+			cursorStyle.Render("▸"),
+			selPrefix,
+			runBadge,
+			selectedRowStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)),
+			branchStr,
+			port,
+			timeStr,
+			status,
+		)
+	} else {
+		line = fmt.Sprintf("  %s%s%s%s  %s  %s  %s",
+			selPrefix,
+			runBadge,
+			normalRowStyle.Render(fmt.Sprintf("%-*s", nameWidth, name)),
+			branchStr,
+			port,
+			timeStr,
+			status,
+		)
+	}
+	return line
 }
 
 func formatStatus(item workspaceItem) string {
@@ -230,6 +331,21 @@ func relativeTime(t time.Time) string {
 		return fmt.Sprintf("%dh ago", int(d.Hours()))
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+// shortRelativeTime returns a compact relative time string (e.g. "3h", "2d").
+func shortRelativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
 }
 
