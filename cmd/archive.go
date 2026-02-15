@@ -10,7 +10,7 @@ import (
 	"github.com/protocollar/fr8/internal/exitcode"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/jsonout"
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/registry"
 	"github.com/protocollar/fr8/internal/tmux"
 )
 
@@ -43,7 +43,7 @@ func runArchive(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 
-	ws, rootPath, commonDir, err := resolveWorkspace(name)
+	ws, rootPath, err := resolveWorkspace(name)
 	if err != nil {
 		if archiveIfExists {
 			if jsonout.Enabled {
@@ -59,11 +59,6 @@ func runArchive(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(rootPath)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
-	}
-
-	st, err := state.Load(commonDir)
-	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
 	}
 
 	// Dry run: just report what would happen
@@ -170,9 +165,20 @@ func runArchive(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update state
-	_ = st.Remove(ws.Name)
-	if err := st.Save(commonDir); err != nil {
-		return fmt.Errorf("saving state: %w", err)
+	regPath, err := registry.DefaultPath()
+	if err != nil {
+		return fmt.Errorf("finding state path: %w", err)
+	}
+	reg, err := registry.Load(regPath)
+	if err != nil {
+		return fmt.Errorf("loading registry: %w", err)
+	}
+	repo := reg.FindByPath(rootPath)
+	if repo != nil {
+		_ = repo.RemoveWorkspace(ws.Name)
+		if err := reg.Save(regPath); err != nil {
+			return fmt.Errorf("saving state: %w", err)
+		}
 	}
 
 	if jsonout.Enabled {

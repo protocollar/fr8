@@ -10,7 +10,7 @@ import (
 	"github.com/protocollar/fr8/internal/env"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/jsonout"
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/registry"
 	"github.com/protocollar/fr8/internal/tmux"
 )
 
@@ -51,7 +51,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 
-	ws, rootPath, _, err := resolveWorkspace(name)
+	ws, rootPath, err := resolveWorkspace(name)
 	if err != nil {
 		return err
 	}
@@ -114,17 +114,27 @@ func runRunAll() error {
 		return err
 	}
 
-	commonDir, err := git.CommonDir(cwd)
+	regPath, err := registry.DefaultPath()
 	if err != nil {
-		return fmt.Errorf("not inside a git repository (run from a repo or use --repo <name>)")
+		return fmt.Errorf("finding state path: %w", err)
+	}
+	reg, err := registry.Load(regPath)
+	if err != nil {
+		return fmt.Errorf("loading registry: %w", err)
 	}
 
-	st, err := state.Load(commonDir)
+	// Find repo in registry by CWD
+	rootPath, err := git.RootWorktreePath(cwd)
 	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
+		return fmt.Errorf("finding root worktree: %w", err)
 	}
 
-	if len(st.Workspaces) == 0 {
+	repo := reg.FindByPath(rootPath)
+	if repo == nil {
+		return fmt.Errorf("repo not found in registry (run fr8 repo add first)")
+	}
+
+	if len(repo.Workspaces) == 0 {
 		if jsonout.Enabled {
 			return jsonout.Write(struct {
 				Started        []string `json:"started"`
@@ -134,11 +144,6 @@ func runRunAll() error {
 		}
 		fmt.Println("No workspaces found.")
 		return nil
-	}
-
-	rootPath, err := git.RootWorktreePath(cwd)
-	if err != nil {
-		return fmt.Errorf("finding root worktree: %w", err)
 	}
 
 	cfg, err := config.Load(rootPath)
@@ -157,8 +162,8 @@ func runRunAll() error {
 	var startedNames, alreadyRunning []string
 	var failed []runFailedItem
 
-	for i := range st.Workspaces {
-		ws := &st.Workspaces[i]
+	for i := range repo.Workspaces {
+		ws := &repo.Workspaces[i]
 		sessionName := tmux.SessionName(repoName, ws.Name)
 
 		if tmux.IsRunning(sessionName) {

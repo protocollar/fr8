@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/protocollar/fr8/internal/jsonout"
 	"github.com/protocollar/fr8/internal/opener"
+	"github.com/protocollar/fr8/internal/userconfig"
 )
 
 var wsOpenOpener string
@@ -33,41 +34,36 @@ func runWsOpen(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 
-	ws, _, _, err := resolveWorkspace(name)
+	ws, _, err := resolveWorkspace(name)
 	if err != nil {
 		return err
 	}
 
-	path, err := opener.DefaultPath()
+	cfg, _, err := loadUserConfig()
 	if err != nil {
 		return err
 	}
 
-	openers, err := opener.Load(path)
-	if err != nil {
-		return fmt.Errorf("loading openers: %w", err)
-	}
-
-	if len(openers) == 0 {
+	if len(cfg.Openers) == 0 {
 		return fmt.Errorf("no openers configured — add one with: fr8 opener add <name> [executable]")
 	}
 
-	var o *opener.Opener
+	var o *userconfig.Opener
 	if wsOpenOpener != "" {
-		o = opener.Find(openers, wsOpenOpener)
+		o = cfg.FindOpener(wsOpenOpener)
 		if o == nil {
 			return fmt.Errorf("opener %q not found (see: fr8 opener list)", wsOpenOpener)
 		}
-	} else if len(openers) == 1 {
-		o = &openers[0]
-	} else if d := opener.FindDefault(openers); d != nil {
+	} else if len(cfg.Openers) == 1 {
+		o = &cfg.Openers[0]
+	} else if d := cfg.FindDefaultOpener(); d != nil {
 		o = d
 	} else {
 		if jsonout.Enabled {
 			return fmt.Errorf("multiple openers configured; specify one with --opener <name> (or set a default with: fr8 opener set-default <name>)")
 		}
 		fmt.Println("Multiple openers configured:")
-		for _, op := range openers {
+		for _, op := range cfg.Openers {
 			fmt.Printf("  - %s\n", op.Name)
 		}
 		return fmt.Errorf("specify one with --opener <name> (or set a default with: fr8 opener set-default <name>)")

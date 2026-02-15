@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/registry"
 )
 
 // Build returns a complete environment variable slice for running scripts
 // in the given workspace. Includes both FR8_* and CONDUCTOR_* (compat) vars,
 // merged with the current process environment.
-func Build(ws *state.Workspace, rootPath, defaultBranch string) []string {
+func Build(ws *registry.Workspace, rootPath, defaultBranch string) []string {
 	fr8Vars := map[string]string{
 		"FR8_WORKSPACE_NAME": ws.Name,
 		"FR8_WORKSPACE_PATH": ws.Path,
@@ -49,7 +49,7 @@ func Build(ws *state.Workspace, rootPath, defaultBranch string) []string {
 // BuildFr8Only returns only the FR8_* and CONDUCTOR_* environment variables
 // (not merged with the current process env). Used for tmux sessions where
 // the user's shell environment is inherited automatically.
-func BuildFr8Only(ws *state.Workspace, rootPath, defaultBranch string) []string {
+func BuildFr8Only(ws *registry.Workspace, rootPath, defaultBranch string) []string {
 	return []string{
 		"FR8_WORKSPACE_NAME=" + ws.Name,
 		"FR8_WORKSPACE_PATH=" + ws.Path,

@@ -64,7 +64,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no command specified after --")
 	}
 
-	ws, rootPath, _, err := resolveWorkspace(wsName)
+	ws, rootPath, err := resolveWorkspace(wsName)
 	if err != nil {
 		return err
 	}

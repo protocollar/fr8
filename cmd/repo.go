@@ -11,7 +11,6 @@ import (
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/jsonout"
 	"github.com/protocollar/fr8/internal/registry"
-	"github.com/protocollar/fr8/internal/state"
 	"github.com/protocollar/fr8/internal/tmux"
 )
 
@@ -108,25 +107,13 @@ func runRepoList(cmd *cobra.Command, args []string) error {
 	for _, repo := range reg.Repos {
 		fmt.Printf("%s (%s)\n", repo.Name, repo.Path)
 
-		commonDir, err := git.CommonDir(repo.Path)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  (unable to read git data: %v)\n", err)
-			continue
-		}
-
-		st, err := state.Load(commonDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  (unable to load state: %v)\n", err)
-			continue
-		}
-
-		if len(st.Workspaces) == 0 {
+		if len(repo.Workspaces) == 0 {
 			fmt.Println("  (no workspaces)")
 			continue
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		for _, ws := range st.Workspaces {
+		for _, ws := range repo.Workspaces {
 			branch, _ := git.CurrentBranch(ws.Path)
 			_, _ = fmt.Fprintf(w, "  %s\t%s\t%d\n", ws.Name, branch, ws.Port)
 		}
@@ -137,19 +124,9 @@ func runRepoList(cmd *cobra.Command, args []string) error {
 }
 
 func repoWorkspaces(repo registry.Repo) []workspaceListItem {
-	commonDir, err := git.CommonDir(repo.Path)
-	if err != nil {
-		return []workspaceListItem{}
-	}
-
-	st, err := state.Load(commonDir)
-	if err != nil {
-		return []workspaceListItem{}
-	}
-
 	hasTmux := tmux.Available() == nil
-	items := make([]workspaceListItem, 0, len(st.Workspaces))
-	for _, ws := range st.Workspaces {
+	items := make([]workspaceListItem, 0, len(repo.Workspaces))
+	for _, ws := range repo.Workspaces {
 		running := false
 		if hasTmux {
 			sessionName := tmux.SessionName(repo.Name, ws.Name)

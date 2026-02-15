@@ -3,9 +3,8 @@ package tui
 import (
 	"github.com/protocollar/fr8/internal/gh"
 	"github.com/protocollar/fr8/internal/git"
-	"github.com/protocollar/fr8/internal/opener"
 	"github.com/protocollar/fr8/internal/registry"
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/userconfig"
 )
 
 type viewState int
@@ -30,7 +29,7 @@ type repoItem struct {
 
 // workspaceItem is a workspace with live git status.
 type workspaceItem struct {
-	Workspace     state.Workspace
+	Workspace     registry.Workspace
 	Branch        string          // live branch from git (not stored in state)
 	DirtyCount    git.DirtyCount  // staged/modified/untracked counts
 	Merged        bool
@@ -56,7 +55,6 @@ type workspacesLoadedMsg struct {
 	workspaces    []workspaceItem
 	repoName      string
 	rootPath      string
-	commonDir     string
 	defaultBranch string
 	err           error
 }
@@ -67,17 +65,17 @@ type archiveResultMsg struct {
 }
 
 type shellRequestMsg struct {
-	workspace state.Workspace
+	workspace registry.Workspace
 	rootPath  string
 }
 
 type attachRequestMsg struct {
-	workspace state.Workspace
+	workspace registry.Workspace
 	rootPath  string
 }
 
 type openRequestMsg struct {
-	workspace  state.Workspace
+	workspace  registry.Workspace
 	openerName string
 }
 
@@ -109,7 +107,7 @@ type stopAllResultMsg struct {
 }
 
 type openersLoadedMsg struct {
-	openers []opener.Opener
+	openers []userconfig.Opener
 	err     error
 }
 
@@ -122,5 +120,4 @@ type batchArchiveResultMsg struct {
 type createRequestMsg struct {
 	name     string
 	rootPath string
-	commonDir string
 }

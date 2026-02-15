@@ -11,7 +11,6 @@ import (
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/jsonout"
 	"github.com/protocollar/fr8/internal/registry"
-	"github.com/protocollar/fr8/internal/state"
 	"github.com/protocollar/fr8/internal/tmux"
 )
 
@@ -51,23 +50,27 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	commonDir, err := git.CommonDir(cwd)
+	regPath, err := registry.DefaultPath()
 	if err != nil {
-		// Not inside a git repo — fall back to listing all registered repos
+		return err
+	}
+	reg, err := registry.Load(regPath)
+	if err != nil {
+		return fmt.Errorf("loading registry: %w", err)
+	}
+
+	rootPath, _ := git.RootWorktreePath(cwd)
+	repo := reg.FindByPath(rootPath)
+	if repo == nil {
+		// Not in a registered repo — fall back to listing all
 		return runListAll()
 	}
 
-	st, err := state.Load(commonDir)
-	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
-	}
-
 	// Reconcile: remove workspaces whose paths no longer exist
-	reconcile(st, cwd)
+	reconcileRepo(repo, cwd)
 
 	// Determine repo name for tmux session lookup
 	hasTmux := tmux.Available() == nil
-	rootPath, _ := git.RootWorktreePath(cwd)
 	repoName := filepath.Base(rootPath)
 	defaultBranch, _ := git.DefaultBranch(rootPath)
 	hasFilters := listRunning || listDirty || listMerged
@@ -82,7 +85,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	var items []workspaceListItem
-	for _, ws := range st.Workspaces {
+	for _, ws := range repo.Workspaces {
 		running := false
 		if hasTmux {
 			sessionName := tmux.SessionName(repoName, ws.Name)
@@ -120,7 +123,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Save reconciled state
-	_ = st.Save(commonDir)
+	_ = reg.Save(regPath)
 
 	if jsonout.Enabled {
 		if items == nil {
@@ -174,26 +177,10 @@ func runListAll() error {
 	var items []workspaceListItem
 
 	for _, repo := range reg.Repos {
-		commonDir, err := git.CommonDir(repo.Path)
-		if err != nil {
-			if !jsonout.Enabled {
-				fmt.Fprintf(os.Stderr, "Warning: unable to read %s: %v\n", repo.Name, err)
-			}
-			continue
-		}
-
-		st, err := state.Load(commonDir)
-		if err != nil {
-			if !jsonout.Enabled {
-				fmt.Fprintf(os.Stderr, "Warning: unable to load state for %s: %v\n", repo.Name, err)
-			}
-			continue
-		}
-
 		rootPath, _ := git.RootWorktreePath(repo.Path)
 		defaultBranch, _ := git.DefaultBranch(rootPath)
 
-		for _, ws := range st.Workspaces {
+		for _, ws := range repo.Workspaces {
 			running := false
 			if hasTmux {
 				sessionName := tmux.SessionName(repo.Name, ws.Name)
@@ -263,10 +250,10 @@ func runListAll() error {
 	return nil
 }
 
-func reconcile(st *state.State, cwd string) {
+func reconcileRepo(repo *registry.Repo, cwd string) {
 	gitWorktrees, err := git.WorktreeList(cwd)
 	if err != nil {
-		return // can't reconcile, leave state as-is
+		return
 	}
 
 	wtPaths := make(map[string]bool, len(gitWorktrees))
@@ -274,11 +261,11 @@ func reconcile(st *state.State, cwd string) {
 		wtPaths[wt.Path] = true
 	}
 
-	var remaining []state.Workspace
-	for _, ws := range st.Workspaces {
+	var remaining []registry.Workspace
+	for _, ws := range repo.Workspaces {
 		if wtPaths[ws.Path] {
 			remaining = append(remaining, ws)
 		}
 	}
-	st.Workspaces = remaining
+	repo.Workspaces = remaining
 }

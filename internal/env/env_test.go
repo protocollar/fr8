@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/registry"
 )
 
 func TestBuildContainsAllVars(t *testing.T) {
-	ws := &state.Workspace{
+	ws := &registry.Workspace{
 		Name: "test-ws",
 		Path: "/tmp/ws/test-ws",
 		Port: 5000,
@@ -45,7 +45,7 @@ func TestBuildContainsAllVars(t *testing.T) {
 }
 
 func TestBuildPreservesExistingEnv(t *testing.T) {
-	ws := &state.Workspace{Name: "ws", Path: "/tmp/ws", Port: 5000, CreatedAt: time.Now()}
+	ws := &registry.Workspace{Name: "ws", Path: "/tmp/ws", Port: 5000, CreatedAt: time.Now()}
 	result := Build(ws, "/root", "main")
 
 	envMap := toMap(result)
@@ -57,7 +57,7 @@ func TestBuildPreservesExistingEnv(t *testing.T) {
 }
 
 func TestBuildFr8OverridesConductor(t *testing.T) {
-	ws := &state.Workspace{Name: "ws", Path: "/tmp/ws", Port: 5000}
+	ws := &registry.Workspace{Name: "ws", Path: "/tmp/ws", Port: 5000}
 	result := Build(ws, "/root", "main")
 
 	envMap := toMap(result)
@@ -69,7 +69,7 @@ func TestBuildFr8OverridesConductor(t *testing.T) {
 }
 
 func TestBuildFr8OnlyContainsOnlyFr8Vars(t *testing.T) {
-	ws := &state.Workspace{
+	ws := &registry.Workspace{
 		Name: "test-ws",
 		Path: "/tmp/ws/test-ws",
 		Port: 5000,
@@ -110,7 +110,7 @@ func TestBuildFr8OnlyContainsOnlyFr8Vars(t *testing.T) {
 }
 
 func TestBuildFr8OnlyExcludesProcessEnv(t *testing.T) {
-	ws := &state.Workspace{Name: "ws", Path: "/tmp/ws", Port: 5000}
+	ws := &registry.Workspace{Name: "ws", Path: "/tmp/ws", Port: 5000}
 	result := BuildFr8Only(ws, "/root", "main")
 
 	envMap := toMap(result)

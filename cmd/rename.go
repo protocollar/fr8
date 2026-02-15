@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/jsonout"
-	"github.com/protocollar/fr8/internal/state"
+	"github.com/protocollar/fr8/internal/registry"
 	"github.com/protocollar/fr8/internal/tmux"
 )
 
@@ -27,14 +27,9 @@ func runRename(cmd *cobra.Command, args []string) error {
 	oldName := args[0]
 	newName := args[1]
 
-	ws, rootPath, commonDir, err := resolveWorkspace(oldName)
+	ws, rootPath, err := resolveWorkspace(oldName)
 	if err != nil {
 		return err
-	}
-
-	st, err := state.Load(commonDir)
-	if err != nil {
-		return fmt.Errorf("loading state: %w", err)
 	}
 
 	// Move the worktree directory (e.g. ~/fr8/myapp/old-name → ~/fr8/myapp/new-name)
@@ -45,13 +40,25 @@ func runRename(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update state: name and path
-	if err := st.Rename(oldName, newName); err != nil {
+	regPath, err := registry.DefaultPath()
+	if err != nil {
 		return err
 	}
-	renamed := st.Find(newName)
+	reg, err := registry.Load(regPath)
+	if err != nil {
+		return fmt.Errorf("loading registry: %w", err)
+	}
+	repo := reg.FindByPath(rootPath)
+	if repo == nil {
+		return fmt.Errorf("repo not found in registry for path: %s", rootPath)
+	}
+	if err := repo.RenameWorkspace(oldName, newName); err != nil {
+		return err
+	}
+	renamed := repo.FindWorkspace(newName)
 	renamed.Path = newPath
 
-	if err := st.Save(commonDir); err != nil {
+	if err := reg.Save(regPath); err != nil {
 		return fmt.Errorf("saving state: %w", err)
 	}
 

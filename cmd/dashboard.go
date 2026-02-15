@@ -87,15 +87,11 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 
 		if result.OpenWorkspace != nil {
 			ws := result.OpenWorkspace
-			openerPath, err := opener.DefaultPath()
+			cfg, _, err := loadUserConfig()
 			if err != nil {
 				return err
 			}
-			openers, err := opener.Load(openerPath)
-			if err != nil {
-				return fmt.Errorf("loading openers: %w", err)
-			}
-			o := opener.Find(openers, result.OpenerName)
+			o := cfg.FindOpener(result.OpenerName)
 			if o == nil {
 				return fmt.Errorf("opener %q not found", result.OpenerName)
 			}
@@ -108,7 +104,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 		}
 
 		if result.CreateRequested {
-			ws, err := createWorkspace(result.RootPath, result.CommonDir, result.CreateName, "", false, true, false)
+			ws, err := createWorkspace(result.RootPath, result.CreateName, "", false, true, false)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error creating workspace: %v\n", err)
 			} else {
