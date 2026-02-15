@@ -127,7 +127,8 @@ func runRepoList(cmd *cobra.Command, args []string) error {
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		for _, ws := range st.Workspaces {
-			_, _ = fmt.Fprintf(w, "  %s\t%s\t%d\n", ws.Name, ws.Branch, ws.Port)
+			branch, _ := git.CurrentBranch(ws.Path)
+			_, _ = fmt.Fprintf(w, "  %s\t%s\t%d\n", ws.Name, branch, ws.Port)
 		}
 		_ = w.Flush()
 	}
@@ -154,9 +155,10 @@ func repoWorkspaces(repo registry.Repo) []workspaceListItem {
 			sessionName := tmux.SessionName(repo.Name, ws.Name)
 			running = tmux.IsRunning(sessionName)
 		}
+		branch, _ := git.CurrentBranch(ws.Path)
 		items = append(items, workspaceListItem{
 			Name:      ws.Name,
-			Branch:    ws.Branch,
+			Branch:    branch,
 			Port:      ws.Port,
 			Path:      ws.Path,
 			Running:   running,

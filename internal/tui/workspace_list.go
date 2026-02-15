@@ -114,7 +114,7 @@ func renderWorkspaceList(m model) string {
 	case m.cursor < len(m.workspaces):
 		item := m.workspaces[m.cursor]
 		var detail strings.Builder
-		detail.WriteString(renderDetailRow("Branch", item.Workspace.Branch))
+		detail.WriteString(renderDetailRow("Branch", item.Branch))
 		detail.WriteString("\n")
 		detail.WriteString(renderDetailRow("Port", fmt.Sprintf(":%d", item.Workspace.Port)))
 		detail.WriteString("\n")

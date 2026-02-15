@@ -80,6 +80,8 @@ func runList(cmd *cobra.Command, args []string) error {
 			running = tmux.IsRunning(sessionName)
 		}
 
+		branch, _ := git.CurrentBranch(ws.Path)
+
 		if hasFilters {
 			if listRunning && !running {
 				continue
@@ -91,7 +93,7 @@ func runList(cmd *cobra.Command, args []string) error {
 				}
 			}
 			if listMerged && defaultBranch != "" {
-				merged, _ := git.IsMerged(ws.Path, ws.Branch, defaultBranch)
+				merged, _ := git.IsMerged(ws.Path, branch, defaultBranch)
 				if !merged {
 					continue
 				}
@@ -100,7 +102,7 @@ func runList(cmd *cobra.Command, args []string) error {
 
 		items = append(items, workspaceListItem{
 			Name:      ws.Name,
-			Branch:    ws.Branch,
+			Branch:    branch,
 			Port:      ws.Port,
 			Path:      ws.Path,
 			Running:   running,
@@ -180,6 +182,8 @@ func runListAll() error {
 				running = tmux.IsRunning(sessionName)
 			}
 
+			branch, _ := git.CurrentBranch(ws.Path)
+
 			if hasFilters {
 				if listRunning && !running {
 					continue
@@ -191,7 +195,7 @@ func runListAll() error {
 					}
 				}
 				if listMerged && defaultBranch != "" {
-					merged, _ := git.IsMerged(ws.Path, ws.Branch, defaultBranch)
+					merged, _ := git.IsMerged(ws.Path, branch, defaultBranch)
 					if !merged {
 						continue
 					}
@@ -201,7 +205,7 @@ func runListAll() error {
 			items = append(items, workspaceListItem{
 				Repo:      repo.Name,
 				Name:      ws.Name,
-				Branch:    ws.Branch,
+				Branch:    branch,
 				Port:      ws.Port,
 				Path:      ws.Path,
 				Running:   running,

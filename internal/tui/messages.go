@@ -31,6 +31,7 @@ type repoItem struct {
 // workspaceItem is a workspace with live git status.
 type workspaceItem struct {
 	Workspace     state.Workspace
+	Branch        string          // live branch from git (not stored in state)
 	DirtyCount    git.DirtyCount  // staged/modified/untracked counts
 	Merged        bool
 	Ahead         int             // ahead of upstream tracking branch

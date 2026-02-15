@@ -68,9 +68,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	defaultBranch, _ := git.DefaultBranch(rootPath)
 
 	branch, _ := git.CurrentBranch(ws.Path)
-	if branch == "" {
-		branch = ws.Branch
-	}
 
 	dc, _ := git.DirtyStatus(ws.Path)
 	lastCommit, _ := git.LastCommit(ws.Path)

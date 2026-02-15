@@ -627,7 +627,8 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 
 		items := make([]workspaceItem, len(st.Workspaces))
 		for i, ws := range st.Workspaces {
-			items[i] = workspaceItem{Workspace: ws}
+			branch, _ := git.CurrentBranch(ws.Path)
+			items[i] = workspaceItem{Workspace: ws, Branch: branch}
 			items[i].PortFree = port.IsFree(ws.Port)
 
 			if hasTmux {
@@ -648,21 +649,21 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 			}
 
 			if defaultBranch != "" {
-				merged, err := git.IsMerged(ws.Path, ws.Branch, defaultBranch)
+				merged, err := git.IsMerged(ws.Path, branch, defaultBranch)
 				if err == nil {
 					items[i].Merged = merged
 				}
 
-				da, db, err := git.AheadBehind(ws.Path, ws.Branch, defaultBranch)
+				da, db, err := git.AheadBehind(ws.Path, branch, defaultBranch)
 				if err == nil {
 					items[i].DefaultAhead = da
 					items[i].DefaultBehind = db
 				}
 			}
 
-			tracking, err := git.TrackingBranch(ws.Path, ws.Branch)
+			tracking, err := git.TrackingBranch(ws.Path, branch)
 			if err == nil {
-				ahead, behind, err := git.AheadBehind(ws.Path, ws.Branch, tracking)
+				ahead, behind, err := git.AheadBehind(ws.Path, branch, tracking)
 				if err == nil {
 					items[i].Ahead = ahead
 					items[i].Behind = behind
@@ -678,10 +679,10 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 			}
 			ch := make(chan prResult, len(items))
 			for i, item := range items {
-				go func(idx int, ws state.Workspace) {
-					pr, _ := gh.PRStatus(ws.Path, ws.Branch)
+				go func(idx int, branch string, ws state.Workspace) {
+					pr, _ := gh.PRStatus(ws.Path, branch)
 					ch <- prResult{idx: idx, pr: pr}
-				}(i, item.Workspace)
+				}(i, item.Branch, item.Workspace)
 			}
 			for range items {
 				res := <-ch
