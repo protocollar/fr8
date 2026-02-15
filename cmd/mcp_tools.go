@@ -13,6 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/protocollar/fr8/internal/config"
 	"github.com/protocollar/fr8/internal/env"
+	"github.com/protocollar/fr8/internal/gh"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/registry"
 	"github.com/protocollar/fr8/internal/state"
@@ -268,8 +269,8 @@ func handleWorkspaceList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 					continue
 				}
 				if filterDirty {
-					dirty, _ := git.HasUncommittedChanges(ws.Path)
-					if !dirty {
+					dc, _ := git.DirtyStatus(ws.Path)
+					if !dc.Dirty() {
 						continue
 					}
 				}
@@ -314,7 +315,18 @@ func handleWorkspaceStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		branch = ws.Branch
 	}
 
-	dirty, _ := git.HasUncommittedChanges(ws.Path)
+	dc, _ := git.DirtyStatus(ws.Path)
+	lastCommit, _ := git.LastCommit(ws.Path)
+	var lastCommitPtr *git.CommitInfo
+	if lastCommit.Subject != "" {
+		lastCommitPtr = &lastCommit
+	}
+
+	var pr *gh.PRInfo
+	if gh.Available() == nil {
+		pr, _ = gh.PRStatus(ws.Path, branch)
+	}
+
 	running := false
 	if tmux.Available() == nil {
 		sessionName := tmux.SessionName(tmux.RepoName(rootPath), ws.Name)
@@ -331,15 +343,20 @@ func handleWorkspaceStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	}
 
 	return mcpResult(workspaceStatusJSON{
-		Name:      ws.Name,
-		Path:      ws.Path,
-		Branch:    branch,
-		Port:      ws.Port,
-		PortEnd:   ws.Port + 9,
-		Dirty:     dirty,
-		Running:   running,
-		CreatedAt: ws.CreatedAt,
-		Env:       envMap,
+		Name:       ws.Name,
+		Path:       ws.Path,
+		Branch:     branch,
+		Port:       ws.Port,
+		PortEnd:    ws.Port + 9,
+		Dirty:      dc.Dirty(),
+		Staged:     dc.Staged,
+		Modified:   dc.Modified,
+		Untracked:  dc.Untracked,
+		Running:    running,
+		CreatedAt:  ws.CreatedAt,
+		Env:        envMap,
+		LastCommit: lastCommitPtr,
+		PR:         pr,
 	})
 }
 

@@ -3,6 +3,9 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/protocollar/fr8/internal/gh"
 )
 
 func renderWorkspaceList(m model) string {
@@ -82,7 +85,7 @@ func renderWorkspaceList(m model) string {
 	case m.view == viewConfirmArchive && m.archiveIdx < len(m.workspaces):
 		ws := m.workspaces[m.archiveIdx]
 		msg := fmt.Sprintf("Archive %q?", ws.Workspace.Name)
-		if ws.Dirty {
+		if ws.DirtyCount.Dirty() {
 			msg += " (has uncommitted changes!)"
 		}
 		var detail strings.Builder
@@ -124,6 +127,20 @@ func renderWorkspaceList(m model) string {
 		}
 		detail.WriteString("\n")
 		detail.WriteString(renderDetailRow("Status", formatStatus(item)))
+		if item.LastCommit != nil {
+			commitStr := truncate(item.LastCommit.Subject, 40) + " " + dimStyle.Render("("+relativeTime(item.LastCommit.Time)+")")
+			detail.WriteString("\n")
+			detail.WriteString(renderDetailRow("Last Commit", commitStr))
+		}
+		if item.DefaultAhead > 0 || item.DefaultBehind > 0 {
+			divStr := fmt.Sprintf("+%d / -%d from %s", item.DefaultAhead, item.DefaultBehind, m.defaultBranch)
+			detail.WriteString("\n")
+			detail.WriteString(renderDetailRow("Divergence", dimStyle.Render(divStr)))
+		}
+		if item.PR != nil {
+			detail.WriteString("\n")
+			detail.WriteString(renderDetailRow("PR", formatPR(item.PR)))
+		}
 		b.WriteString(renderTitledPanel("Details", detail.String(), w))
 	}
 	b.WriteString("\n")
@@ -155,8 +172,18 @@ func formatStatus(item workspaceItem) string {
 
 	var parts []string
 
-	if item.Dirty {
-		parts = append(parts, statusDirtyStyle.Render("● dirty"))
+	if item.DirtyCount.Dirty() {
+		var counts []string
+		if item.DirtyCount.Staged > 0 {
+			counts = append(counts, fmt.Sprintf("%d↑", item.DirtyCount.Staged))
+		}
+		if item.DirtyCount.Modified > 0 {
+			counts = append(counts, fmt.Sprintf("%d~", item.DirtyCount.Modified))
+		}
+		if item.DirtyCount.Untracked > 0 {
+			counts = append(counts, fmt.Sprintf("%d?", item.DirtyCount.Untracked))
+		}
+		parts = append(parts, statusDirtyStyle.Render("● "+strings.Join(counts, " ")))
 	}
 	if item.Merged {
 		parts = append(parts, statusMergedStyle.Render("✓ merged"))
@@ -174,6 +201,9 @@ func formatStatus(item workspaceItem) string {
 		}
 		parts = append(parts, dimStyle.Render(ab))
 	}
+	if item.PR != nil {
+		parts = append(parts, formatPR(item.PR))
+	}
 
 	if len(parts) == 0 {
 		return statusCleanStyle.Render("● clean")
@@ -186,4 +216,34 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max-1] + "…"
+}
+
+// relativeTime returns a human-readable relative time string.
+func relativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+// formatPR renders a PR badge with appropriate styling.
+func formatPR(pr *gh.PRInfo) string {
+	badge := fmt.Sprintf("PR #%d", pr.Number)
+	if pr.IsDraft {
+		badge += " draft"
+	}
+	switch pr.ReviewDecision {
+	case "APPROVED":
+		badge += " ✓"
+	case "CHANGES_REQUESTED":
+		badge += " ✗"
+	}
+	return statusMergedStyle.Render(badge)
 }

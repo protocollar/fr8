@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/protocollar/fr8/internal/config"
 	"github.com/protocollar/fr8/internal/env"
+	"github.com/protocollar/fr8/internal/gh"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/opener"
 	"github.com/protocollar/fr8/internal/port"
@@ -32,6 +33,7 @@ type model struct {
 	repoName          string // current repo being viewed
 	rootPath          string // root worktree path for current repo
 	commonDir         string // git common dir for current repo
+	defaultBranch     string // default branch for current repo
 	shellRequest      *shellRequestMsg
 	attachRequest     *attachRequestMsg
 	openRequest       *openRequestMsg
@@ -103,6 +105,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.repoName = msg.repoName
 		m.rootPath = msg.rootPath
 		m.commonDir = msg.commonDir
+		m.defaultBranch = msg.defaultBranch
 		m.cursor = 0
 		m.view = viewWorkspaceList
 		return m, nil
@@ -375,7 +378,7 @@ func (m model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.workspaces) > 0 {
 			var names []string
 			for _, ws := range m.workspaces {
-				if ws.Merged && !ws.Dirty {
+				if ws.Merged && !ws.DirtyCount.Dirty() {
 					names = append(names, ws.Workspace.Name)
 				}
 			}
@@ -632,17 +635,28 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 				items[i].Running = tmux.IsRunning(sessionName)
 			}
 
-			dirty, err := git.HasUncommittedChanges(ws.Path)
+			dc, err := git.DirtyStatus(ws.Path)
 			if err != nil {
 				items[i].StatusErr = err
 				continue
 			}
-			items[i].Dirty = dirty
+			items[i].DirtyCount = dc
+
+			ci, err := git.LastCommit(ws.Path)
+			if err == nil {
+				items[i].LastCommit = &ci
+			}
 
 			if defaultBranch != "" {
 				merged, err := git.IsMerged(ws.Path, ws.Branch, defaultBranch)
 				if err == nil {
 					items[i].Merged = merged
+				}
+
+				da, db, err := git.AheadBehind(ws.Path, ws.Branch, defaultBranch)
+				if err == nil {
+					items[i].DefaultAhead = da
+					items[i].DefaultBehind = db
 				}
 			}
 
@@ -656,11 +670,31 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 			}
 		}
 
+		// Fan out PR queries in parallel if gh is available.
+		if gh.Available() == nil {
+			type prResult struct {
+				idx int
+				pr  *gh.PRInfo
+			}
+			ch := make(chan prResult, len(items))
+			for i, item := range items {
+				go func(idx int, ws state.Workspace) {
+					pr, _ := gh.PRStatus(ws.Path, ws.Branch)
+					ch <- prResult{idx: idx, pr: pr}
+				}(i, item.Workspace)
+			}
+			for range items {
+				res := <-ch
+				items[res.idx].PR = res.pr
+			}
+		}
+
 		return workspacesLoadedMsg{
-			workspaces: items,
-			repoName:   repo.Name,
-			rootPath:   rootPath,
-			commonDir:  commonDir,
+			workspaces:    items,
+			repoName:      repo.Name,
+			rootPath:      rootPath,
+			commonDir:     commonDir,
+			defaultBranch: defaultBranch,
 		}
 	}
 }

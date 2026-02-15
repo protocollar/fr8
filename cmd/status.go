@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/protocollar/fr8/internal/env"
+	"github.com/protocollar/fr8/internal/gh"
 	"github.com/protocollar/fr8/internal/git"
 	"github.com/protocollar/fr8/internal/jsonout"
 	"github.com/protocollar/fr8/internal/tmux"
@@ -33,9 +34,14 @@ type workspaceStatusJSON struct {
 	Port      int               `json:"port"`
 	PortEnd   int               `json:"port_end"`
 	Dirty     bool              `json:"dirty"`
+	Staged    int               `json:"staged"`
+	Modified  int               `json:"modified"`
+	Untracked int               `json:"untracked"`
 	Running   bool              `json:"running"`
 	CreatedAt time.Time         `json:"created_at"`
 	Env       map[string]string `json:"env"`
+	LastCommit *git.CommitInfo  `json:"last_commit,omitempty"`
+	PR         *gh.PRInfo       `json:"pr,omitempty"`
 }
 
 func (w workspaceStatusJSON) Concise() any {
@@ -66,7 +72,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		branch = ws.Branch
 	}
 
-	dirty, _ := git.HasUncommittedChanges(ws.Path)
+	dc, _ := git.DirtyStatus(ws.Path)
+	lastCommit, _ := git.LastCommit(ws.Path)
+	var lastCommitPtr *git.CommitInfo
+	if lastCommit.Subject != "" {
+		lastCommitPtr = &lastCommit
+	}
+
+	var pr *gh.PRInfo
+	if gh.Available() == nil {
+		pr, _ = gh.PRStatus(ws.Path, branch)
+	}
 
 	running := false
 	if tmux.Available() == nil {
@@ -84,28 +100,43 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			}
 		}
 		return jsonout.Write(workspaceStatusJSON{
-			Name:      ws.Name,
-			Path:      ws.Path,
-			Branch:    branch,
-			Port:      ws.Port,
-			PortEnd:   ws.Port + 9,
-			Dirty:     dirty,
-			Running:   running,
-			CreatedAt: ws.CreatedAt,
-			Env:       envMap,
+			Name:       ws.Name,
+			Path:       ws.Path,
+			Branch:     branch,
+			Port:       ws.Port,
+			PortEnd:    ws.Port + 9,
+			Dirty:      dc.Dirty(),
+			Staged:     dc.Staged,
+			Modified:   dc.Modified,
+			Untracked:  dc.Untracked,
+			Running:    running,
+			CreatedAt:  ws.CreatedAt,
+			Env:        envMap,
+			LastCommit: lastCommitPtr,
+			PR:         pr,
 		})
 	}
 
 	fmt.Printf("Workspace: %s\n", ws.Name)
 	fmt.Printf("  Path:           %s\n", ws.Path)
 	fmt.Printf("  Branch:         %s\n", branch)
-	if dirty {
-		fmt.Printf("  Status:         dirty (uncommitted changes)\n")
+	if dc.Dirty() {
+		fmt.Printf("  Status:         dirty (%d staged, %d modified, %d untracked)\n", dc.Staged, dc.Modified, dc.Untracked)
 	} else {
 		fmt.Printf("  Status:         clean\n")
 	}
 	fmt.Printf("  Port:           %d (range %d-%d)\n", ws.Port, ws.Port, ws.Port+9)
 	fmt.Printf("  Created:        %s\n", ws.CreatedAt.Format("2006-01-02 15:04:05"))
+	if lastCommitPtr != nil {
+		fmt.Printf("  Last Commit:    %s (%s)\n", lastCommit.Subject, lastCommit.Time.Format("2006-01-02 15:04"))
+	}
+	if pr != nil {
+		draft := ""
+		if pr.IsDraft {
+			draft = " (draft)"
+		}
+		fmt.Printf("  PR:             #%d %s%s\n", pr.Number, pr.State, draft)
+	}
 	fmt.Println()
 	fmt.Printf("Environment:\n")
 	fmt.Printf("  FR8_WORKSPACE_NAME  %s\n", ws.Name)
