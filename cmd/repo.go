@@ -243,37 +243,6 @@ func runRepoRemove(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// autoRegisterRepo silently registers a repo if not already present.
-// Skips on name collision — never blocks other commands.
-func autoRegisterRepo(rootPath string) {
-	regPath, err := registry.DefaultPath()
-	if err != nil {
-		return
-	}
-
-	reg, err := registry.Load(regPath)
-	if err != nil {
-		return
-	}
-
-	// Already registered by path
-	if reg.FindByPath(rootPath) != nil {
-		return
-	}
-
-	name := filepath.Base(rootPath)
-
-	// Name collision — skip silently
-	if reg.Find(name) != nil {
-		return
-	}
-
-	reg.Repos = append(reg.Repos, registry.Repo{Name: name, Path: rootPath})
-	if err := reg.Save(regPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to auto-register repo: %v\n", err)
-	}
-}
-
 // repoNameCompletion returns a ValidArgsFunction that completes repo names.
 func repoNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) > 0 {

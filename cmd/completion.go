@@ -78,16 +78,3 @@ func workspaceNameCompletion(cmd *cobra.Command, args []string, toComplete strin
 	// Fall back to all registered workspace names
 	return reg.AllWorkspaceNames(), cobra.ShellCompDirectiveNoFileComp
 }
-
-// allRegistryWorkspaceNames returns workspace names from all registered repos.
-func allRegistryWorkspaceNames() []string {
-	regPath, err := registry.DefaultPath()
-	if err != nil {
-		return nil
-	}
-	reg, err := registry.Load(regPath)
-	if err != nil {
-		return nil
-	}
-	return reg.AllWorkspaceNames()
-}
