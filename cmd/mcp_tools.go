@@ -240,6 +240,13 @@ func handleWorkspaceList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 	}
 
 	hasTmux := tmux.Available() == nil
+	runningSessions := make(map[string]bool)
+	if hasTmux {
+		sessions, _ := tmux.ListFr8Sessions()
+		for _, s := range sessions {
+			runningSessions[s.Name] = true
+		}
+	}
 	var items []workspaceListItem
 
 	for _, r := range reg.Repos {
@@ -261,7 +268,7 @@ func handleWorkspaceList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 			running := false
 			if hasTmux {
 				sessionName := tmux.SessionName(r.Name, ws.Name)
-				running = tmux.IsRunning(sessionName)
+				running = runningSessions[sessionName]
 			}
 
 			branch, _ := git.CurrentBranch(ws.Path)
@@ -697,7 +704,7 @@ func handleRepoList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTool
 		Workspaces []workspaceListItem `json:"workspaces,omitempty"`
 	}
 
-	var items []mcpRepoItem
+	items := make([]mcpRepoItem, 0, len(reg.Repos))
 	for _, r := range reg.Repos {
 		item := mcpRepoItem{Name: r.Name, Path: r.Path}
 		if withWorkspaces {

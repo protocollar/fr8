@@ -80,6 +80,103 @@ func TestFilesEqual(t *testing.T) {
 	}
 }
 
+func TestFilesEqualDifferentSizes(t *testing.T) {
+	dir := t.TempDir()
+	short := filepath.Join(dir, "short")
+	long := filepath.Join(dir, "long")
+
+	if err := os.WriteFile(short, []byte("hi"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(long, []byte("hello world"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Different sizes should return false without reading content
+	if filesEqual(short, long) {
+		t.Error("expected files with different sizes to be unequal")
+	}
+}
+
+func TestCopyFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	dst := filepath.Join(dir, "dst")
+
+	content := []byte("streaming copy test content")
+	if err := os.WriteFile(src, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyFile(src, dst, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("copied content = %q, want %q", got, content)
+	}
+}
+
+func TestCopyFilePreservesMode(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	dst := filepath.Join(dir, "dst")
+
+	if err := os.WriteFile(src, []byte("exec"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyFile(src, dst, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Check executable bit is set (masking umask variations)
+	if info.Mode()&0100 == 0 {
+		t.Errorf("expected executable mode, got %v", info.Mode())
+	}
+}
+
+func TestCopyFileMissingSrc(t *testing.T) {
+	dir := t.TempDir()
+	err := copyFile(filepath.Join(dir, "missing"), filepath.Join(dir, "dst"), 0644)
+	if err == nil {
+		t.Error("expected error when source file is missing")
+	}
+}
+
+func TestCopyFileOverwrites(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	dst := filepath.Join(dir, "dst")
+
+	if err := os.WriteFile(src, []byte("new"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dst, []byte("old content here"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyFile(src, dst, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "new" {
+		t.Errorf("expected dst to be overwritten, got %q", got)
+	}
+}
+
 func TestSyncCopiesFiles(t *testing.T) {
 	root := t.TempDir()
 	worktree := t.TempDir()
