@@ -72,12 +72,21 @@ func runList(cmd *cobra.Command, args []string) error {
 	defaultBranch, _ := git.DefaultBranch(rootPath)
 	hasFilters := listRunning || listDirty || listMerged
 
+	// Build running session lookup map (one subprocess instead of N)
+	runningSessions := make(map[string]bool)
+	if hasTmux {
+		sessions, _ := tmux.ListFr8Sessions()
+		for _, s := range sessions {
+			runningSessions[s.Name] = true
+		}
+	}
+
 	var items []workspaceListItem
 	for _, ws := range st.Workspaces {
 		running := false
 		if hasTmux {
 			sessionName := tmux.SessionName(repoName, ws.Name)
-			running = tmux.IsRunning(sessionName)
+			running = runningSessions[sessionName]
 		}
 
 		branch, _ := git.CurrentBranch(ws.Path)
@@ -153,6 +162,15 @@ func runListAll() error {
 	hasTmux := tmux.Available() == nil
 	hasFilters := listRunning || listDirty || listMerged
 
+	// Build running session lookup map (one subprocess instead of N)
+	runningSessions := make(map[string]bool)
+	if hasTmux {
+		sessions, _ := tmux.ListFr8Sessions()
+		for _, s := range sessions {
+			runningSessions[s.Name] = true
+		}
+	}
+
 	var items []workspaceListItem
 
 	for _, repo := range reg.Repos {
@@ -179,7 +197,7 @@ func runListAll() error {
 			running := false
 			if hasTmux {
 				sessionName := tmux.SessionName(repo.Name, ws.Name)
-				running = tmux.IsRunning(sessionName)
+				running = runningSessions[sessionName]
 			}
 
 			branch, _ := git.CurrentBranch(ws.Path)

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,13 +58,8 @@ func Sync(rootPath, worktreePath string) error {
 				return fmt.Errorf("creating directory for %s: %w", rel, err)
 			}
 
-			srcData, err := os.ReadFile(src)
-			if err != nil {
-				return fmt.Errorf("reading %s: %w", rel, err)
-			}
-
-			if err := os.WriteFile(dst, srcData, info.Mode()); err != nil {
-				return fmt.Errorf("writing %s: %w", rel, err)
+			if err := copyFile(src, dst, info.Mode()); err != nil {
+				return fmt.Errorf("copying %s: %w", rel, err)
 			}
 
 			fmt.Printf("  Copied %s\n", rel)
@@ -93,10 +89,35 @@ func parseIncludeFile(path string) ([]string, error) {
 }
 
 func filesEqual(a, b string) bool {
+	infoA, errA := os.Stat(a)
+	infoB, errB := os.Stat(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	if infoA.Size() != infoB.Size() {
+		return false
+	}
 	dataA, errA := os.ReadFile(a)
 	dataB, errB := os.ReadFile(b)
 	if errA != nil || errB != nil {
 		return false
 	}
 	return bytes.Equal(dataA, dataB)
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	sf, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = sf.Close() }()
+
+	df, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = df.Close() }()
+
+	_, err = io.Copy(df, sf)
+	return err
 }

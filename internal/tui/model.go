@@ -625,50 +625,75 @@ func loadWorkspacesCmd(repo registry.Repo) tea.Cmd {
 		hasTmux := tmux.Available() == nil
 		repoName := tmux.RepoName(rootPath)
 
+		// Build running session lookup map (one subprocess instead of N)
+		runningSessions := make(map[string]bool)
+		if hasTmux {
+			sessions, _ := tmux.ListFr8Sessions()
+			for _, s := range sessions {
+				runningSessions[s.Name] = true
+			}
+		}
+
 		items := make([]workspaceItem, len(st.Workspaces))
+
+		// Fan out git enrichment per workspace in parallel
+		type enrichResult struct {
+			idx  int
+			item workspaceItem
+		}
+		gitCh := make(chan enrichResult, len(st.Workspaces))
 		for i, ws := range st.Workspaces {
-			branch, _ := git.CurrentBranch(ws.Path)
-			items[i] = workspaceItem{Workspace: ws, Branch: branch}
-			items[i].PortFree = port.IsFree(ws.Port)
+			go func(idx int, ws state.Workspace) {
+				branch, _ := git.CurrentBranch(ws.Path)
+				item := workspaceItem{Workspace: ws, Branch: branch}
+				item.PortFree = port.IsFree(ws.Port)
 
-			if hasTmux {
-				sessionName := tmux.SessionName(repoName, ws.Name)
-				items[i].Running = tmux.IsRunning(sessionName)
-			}
-
-			dc, err := git.DirtyStatus(ws.Path)
-			if err != nil {
-				items[i].StatusErr = err
-				continue
-			}
-			items[i].DirtyCount = dc
-
-			ci, err := git.LastCommit(ws.Path)
-			if err == nil {
-				items[i].LastCommit = &ci
-			}
-
-			if defaultBranch != "" {
-				merged, err := git.IsMerged(ws.Path, branch, defaultBranch)
-				if err == nil {
-					items[i].Merged = merged
+				if hasTmux {
+					sessionName := tmux.SessionName(repoName, ws.Name)
+					item.Running = runningSessions[sessionName]
 				}
 
-				da, db, err := git.AheadBehind(ws.Path, branch, defaultBranch)
-				if err == nil {
-					items[i].DefaultAhead = da
-					items[i].DefaultBehind = db
+				dc, err := git.DirtyStatus(ws.Path)
+				if err != nil {
+					item.StatusErr = err
+					gitCh <- enrichResult{idx: idx, item: item}
+					return
 				}
-			}
+				item.DirtyCount = dc
 
-			tracking, err := git.TrackingBranch(ws.Path, branch)
-			if err == nil {
-				ahead, behind, err := git.AheadBehind(ws.Path, branch, tracking)
+				ci, err := git.LastCommit(ws.Path)
 				if err == nil {
-					items[i].Ahead = ahead
-					items[i].Behind = behind
+					item.LastCommit = &ci
 				}
-			}
+
+				if defaultBranch != "" {
+					merged, err := git.IsMerged(ws.Path, branch, defaultBranch)
+					if err == nil {
+						item.Merged = merged
+					}
+
+					da, db, err := git.AheadBehind(ws.Path, branch, defaultBranch)
+					if err == nil {
+						item.DefaultAhead = da
+						item.DefaultBehind = db
+					}
+				}
+
+				tracking, err := git.TrackingBranch(ws.Path, branch)
+				if err == nil {
+					ahead, behind, err := git.AheadBehind(ws.Path, branch, tracking)
+					if err == nil {
+						item.Ahead = ahead
+						item.Behind = behind
+					}
+				}
+
+				gitCh <- enrichResult{idx: idx, item: item}
+			}(i, ws)
+		}
+		for range st.Workspaces {
+			res := <-gitCh
+			items[res.idx] = res.item
 		}
 
 		// Fan out PR queries in parallel if gh is available.
@@ -800,10 +825,17 @@ func runAllCmd(item repoItem) tea.Cmd {
 		defaultBranch, _ := git.DefaultBranch(rootPath)
 		repoName := tmux.RepoName(rootPath)
 
+		// Build running session lookup map (one subprocess instead of N)
+		runningSessions := make(map[string]bool)
+		sessions, _ := tmux.ListFr8Sessions()
+		for _, s := range sessions {
+			runningSessions[s.Name] = true
+		}
+
 		var started int
 		for _, ws := range st.Workspaces {
 			sessionName := tmux.SessionName(repoName, ws.Name)
-			if tmux.IsRunning(sessionName) {
+			if runningSessions[sessionName] {
 				continue
 			}
 			envVars := env.BuildFr8Only(&ws, rootPath, defaultBranch)
@@ -851,7 +883,22 @@ func runAllGlobalCmd(items []repoItem) tea.Cmd {
 			return runAllResultMsg{err: err}
 		}
 
-		var totalStarted int
+		// Build running session lookup map (one subprocess instead of N)
+		runningSessions := make(map[string]bool)
+		sessions, _ := tmux.ListFr8Sessions()
+		for _, s := range sessions {
+			runningSessions[s.Name] = true
+		}
+
+		// Collect all start jobs
+		type startJob struct {
+			sessionName string
+			dir         string
+			runScript   string
+			envVars     []string
+		}
+		var jobs []startJob
+
 		for _, item := range items {
 			if item.Err != nil {
 				continue
@@ -883,13 +930,34 @@ func runAllGlobalCmd(items []repoItem) tea.Cmd {
 
 			for _, ws := range st.Workspaces {
 				sessionName := tmux.SessionName(repoName, ws.Name)
-				if tmux.IsRunning(sessionName) {
+				if runningSessions[sessionName] {
 					continue
 				}
 				envVars := env.BuildFr8Only(&ws, rootPath, defaultBranch)
-				if err := tmux.Start(sessionName, ws.Path, cfg.Scripts.Run, envVars); err != nil {
-					continue
-				}
+				jobs = append(jobs, startJob{
+					sessionName: sessionName,
+					dir:         ws.Path,
+					runScript:   cfg.Scripts.Run,
+					envVars:     envVars,
+				})
+			}
+		}
+
+		// Fan out tmux starts with bounded concurrency
+		const maxConcurrent = 5
+		sem := make(chan struct{}, maxConcurrent)
+		results := make(chan bool, len(jobs))
+		for _, job := range jobs {
+			sem <- struct{}{}
+			go func(j startJob) {
+				defer func() { <-sem }()
+				err := tmux.Start(j.sessionName, j.dir, j.runScript, j.envVars)
+				results <- (err == nil)
+			}(job)
+		}
+		var totalStarted int
+		for range jobs {
+			if <-results {
 				totalStarted++
 			}
 		}
