@@ -83,7 +83,7 @@ Create `fr8.json` in your repo root:
     "archive": "bin/archive-workspace"
   },
   "port_range": 10,
-  "base_port": 8000,
+  "base_port": 60000,
   "worktree_path": "~/fr8"
 }
 ```
@@ -94,7 +94,7 @@ Create `fr8.json` in your repo root:
 | `scripts.run`     |         | Command to start the dev server                                       |
 | `scripts.archive` |         | Command to run before removing a workspace                            |
 | `port_range`      | `10`    | Number of consecutive ports per workspace                             |
-| `base_port`       | `8000`  | Starting port for allocation                                          |
+| `base_port`       | `60000` | Starting port for allocation                                          |
 | `worktree_path`   | `~/fr8` | Where to create worktrees (supports `~`, relative, or absolute paths) |
 
 Falls back to `conductor.json` if `fr8.json` doesn't exist, so projects using [Conductor](https://conductor.build) work without changes.
@@ -177,7 +177,7 @@ fr8 sets these before running any script:
 | `FR8_WORKSPACE_PATH` | `/Users/you/fr8/myapp/bright-berlin`       |
 | `FR8_ROOT_PATH`      | `/Users/you/Code/myapp`                    |
 | `FR8_DEFAULT_BRANCH` | `main`                                     |
-| `FR8_PORT`           | `8000`                                     |
+| `FR8_PORT`           | `60000`                                    |
 
 `CONDUCTOR_*` equivalents are also set for backwards compatibility with Conductor.
 
