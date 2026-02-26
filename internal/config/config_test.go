@@ -226,8 +226,8 @@ func TestLoadNoConfigFile(t *testing.T) {
 	if cfg.PortRange != 10 {
 		t.Errorf("PortRange = %d, want 10 (default)", cfg.PortRange)
 	}
-	if cfg.BasePort != 8000 {
-		t.Errorf("BasePort = %d, want 8000 (default)", cfg.BasePort)
+	if cfg.BasePort != 60000 {
+		t.Errorf("BasePort = %d, want 60000 (default)", cfg.BasePort)
 	}
 	home, _ := os.UserHomeDir()
 	wantPath := filepath.Join(home, "fr8")
@@ -255,8 +255,8 @@ func TestApplyDefaults(t *testing.T) {
 	if cfg.PortRange != 10 {
 		t.Errorf("PortRange = %d, want 10", cfg.PortRange)
 	}
-	if cfg.BasePort != 8000 {
-		t.Errorf("BasePort = %d, want 8000", cfg.BasePort)
+	if cfg.BasePort != 60000 {
+		t.Errorf("BasePort = %d, want 60000", cfg.BasePort)
 	}
 	home, _ := os.UserHomeDir()
 	wantPath := filepath.Join(home, "fr8")
